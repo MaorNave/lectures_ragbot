@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartUp Academy Assistant</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --card: #ffffff;
+    --primary: #1f4ed8; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Hebrew", "Heebo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--font); color: var(--fg); background: var(--bg); display: flex; flex-direction: column; }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border);
+  }
+  header .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 700; display: grid; place-items: center; letter-spacing: .5px; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--muted); white-space: nowrap; }
+  .pill i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-inline-end: 6px; vertical-align: middle; }
+  .pill.ok i { background: var(--ok); } .pill.degraded i { background: var(--warn); } .pill.down i { background: var(--bad); }
+  main { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px 20px; max-width: 1280px; width: 100%; margin: 0 auto; min-height: 0; }
+  aside { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; overflow-y: auto; min-height: 0; }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .chip { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: start; }
+  .chip:hover { border-color: var(--primary); color: var(--primary); }
+  .chip[dir="rtl"] { direction: rtl; }
+  .version { margin-top: 10px; }
+  .version h3 { font-size: 13px; margin: 8px 0 4px; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 6px; background: var(--primary); color: #fff; }
+  .badge.v1 { background: #6b7280; }
+  .badge.tedx { background: #b91c1c; }
+  .badge.outsource { background: #0f766e; }
+  .lect { display: flex; gap: 8px; align-items: baseline; width: 100%; border: 0; background: transparent; padding: 5px 6px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; text-align: start; }
+  .lect:hover { background: #eef2ff; color: var(--primary); }
+  .lect .num { font-weight: 600; min-width: 74px; }
+  .lect .title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #chat { min-height: 0; height: calc(100vh - 118px); }
+  #chat .su-widget { height: 100%; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 0 12px; }
+  footer code { background: #eef2ff; padding: 1px 6px; border-radius: 4px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { display: none; } #chat { height: calc(100vh - 110px); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SU</div>
+  <div>
+    <h1>SmartUp Academy Assistant</h1>
+    <div class="sub">Grounded answers from Yonatan Stern's Foundations lectures · Hebrew / English</div>
+  </div>
+  <div class="spacer"></div>
+  <a id="dashlink" href="/dashboard" class="pill" hidden title="Every chat call, step by step: query, passages, grading, generation">Pipeline dashboard ↗</a>
+  <span id="health" class="pill"><i></i>checking…</span>
+</header>
+
+<main>
+  <aside>
+    <h2>Try asking</h2>
+    <div class="chips" id="chips"></div>
+    <h2>Lectures · click for a summary</h2>
+    <div id="lectures"><span class="pill"><i></i>loading…</span></div>
+  </aside>
+  <section id="chat" aria-label="Chat"></section>
+</main>
+
+<footer>Embed on your website with one tag: <code>&lt;script src="/widget/widget.js" data-api-base="…"&gt;&lt;/script&gt;</code> · <a href="/widget/embed-demo.html">see the floating-bubble demo</a> · <a href="/docs">API docs</a></footer>
+
+<!-- The same widget that embeds on the website, rendered inline as a full chat box -->
+<script src="/widget/widget.js" data-mode="inline" data-target="#chat" data-storage-key="fullpage"
+        data-title="SmartUp Academy Assistant" data-lang="auto"></script>
+<script>
+(function () {
+  var apiBase = location.origin;
+  var EXAMPLES = [
+    'What does Yonatan say about profitability versus growth?',
+    'מה שיעורי הבית של הרצאה 5?',
+    'Which lectures discuss branding?',
+    'How should I price my product according to the course?',
+    'מה ההבדל בין הרצאה 1 בגרסה v1 ובגרסה v2?',
+    'Summarize lecture 10'
+  ];
+  var HEBREW = /[֐-׿]/;
+  function ask(text) { if (window.SmartUpWidget) window.SmartUpWidget.send(text); }
+
+  var chips = document.getElementById('chips');
+  EXAMPLES.forEach(function (q) {
+    var b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = q;
+    if (HEBREW.test(q)) b.setAttribute('dir', 'rtl');
+    b.addEventListener('click', function () { ask(q); });
+    chips.appendChild(b);
+  });
+
+  // health pill
+  fetch(apiBase + '/health').then(function (r) { return r.json(); }).then(function (h) {
+    var pill = document.getElementById('health');
+    var ix = h.index || {}, ol = h.ollama || {}, rr = h.reranker || {};
+    pill.className = 'pill ' + (h.status === 'ok' ? 'ok' : 'degraded');
+    pill.textContent = '';
+    pill.appendChild(document.createElement('i'));
+    pill.appendChild(document.createTextNode(
+      (h.status === 'ok' ? 'ready' : 'degraded') + ' · ' + String(h.chat_model || '?') +
+      ' · index ' + (ix.ok ? 'ok' : 'down') + (ol.model_present === false ? ' · model missing' : '') +
+      (ol.embed_model_present === false ? ' · embeddings missing' : '')));
+    pill.title = 'Ollama: ' + JSON.stringify(ol) + '\nIndex: ' + JSON.stringify(ix) + '\nReranker: ' + JSON.stringify(rr);
+  }).catch(function () {
+    var pill = document.getElementById('health'); pill.className = 'pill down';
+    pill.textContent = ''; pill.appendChild(document.createElement('i')); pill.appendChild(document.createTextNode('API unreachable'));
+  });
+
+  // lecture catalogue
+  fetch(apiBase + '/lectures').then(function (r) { return r.json(); }).then(function (groups) {
+    var box = document.getElementById('lectures'); box.innerHTML = '';
+    // the API returns the groups in search order: v2 → TEDx → v1 → other outside lectures
+    groups.forEach(function (g) {
+      var tier = g.tier || g.course_version;
+      var sec = document.createElement('div'); sec.className = 'version';
+      var h = document.createElement('h3');
+      var badge = document.createElement('span'); badge.className = 'badge ' + tier; badge.textContent = tier === 'outsource' ? 'other' : tier;
+      h.appendChild(badge); h.appendChild(document.createTextNode(g.label || (tier === 'v2' ? 'Foundations v2 (primary)' : 'Foundations v1 (fallback)')));
+      sec.appendChild(h);
+      g.lectures.forEach(function (l) {
+        var b = document.createElement('button'); b.className = 'lect'; b.type = 'button';
+        var n = document.createElement('span'); n.className = 'num'; n.textContent = l.display || (tier === 'tedx' ? 'TEDx' : 'Talk');
+        var t = document.createElement('span'); t.className = 'title'; t.textContent = l.lecture_title; t.title = (l.lecture_subjects || []).join(' · ');
+        b.appendChild(n); b.appendChild(t);
+        b.addEventListener('click', function () {
+          if (tier === 'v2' || tier === 'v1') ask('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
+          else if (tier === 'tedx') ask("Summarize Yonatan's TEDx talk");
+          else ask('Summarize the lecture "' + l.lecture_title + '"');
+        });
+        sec.appendChild(b);
+      });
+      box.appendChild(sec);
+    });
+  }).catch(function () { document.getElementById('lectures').innerHTML = '<span class="pill down"><i></i>catalogue unavailable</span>'; });
+})();
+</script>
+<script>
+  // the dashboard link appears only when the API shares traces with this browser (DEBUG_DASHBOARD)
+  fetch('/debug/traces', { cache: 'no-store' }).then(function (r) { if (r.ok) document.getElementById('dashlink').hidden = false; }).catch(function () {});
+</script>
+</body>
+</html>

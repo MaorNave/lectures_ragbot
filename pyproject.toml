@@ -1,0 +1,65 @@
+[project]
+name = "smartup-rag"
+version = "0.2.0"
+description = "Local RAG chatbot for SmartUp Academy lectures (Ollama + Chroma + SQLite FTS5 + a local cross-encoder, LangChain/LangGraph)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "langchain-core>=1.6",
+  "langchain-ollama>=1.1",
+  "langchain-text-splitters>=1.1",
+  "langgraph>=1.2",
+  "chromadb>=1.5",
+  "sentence-transformers>=5.0",
+  "fastapi>=0.141",
+  "uvicorn[standard]>=0.53",
+  "pydantic>=2.13",
+  "pydantic-settings>=2.15",
+  "python-dotenv>=1.2",
+  "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff"]
+
+[project.scripts]
+smartup = "smartup_rag.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["smartup_rag*"]
+
+# The evaluation question set is data, not code, and would otherwise be dropped from a built wheel.
+[tool.setuptools.package-data]
+smartup_rag = ["eval/*.jsonl"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",    # long lines are handled by the formatter / line-length above
+    "B008",    # FastAPI dependencies are call-in-default by design
+    "SIM105",  # contextlib.suppress is not clearer than the explicit try/except here
+    # The corpus, the prompts and the tests are deliberately bilingual: Hebrew letters and typographic
+    # dashes (the citation format uses an em dash) are content, not typos.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+# Deliberate: the chatbot must survive a flaky model or a missing index rather than 500 at a visitor.
+# Every broad catch below logs and degrades gracefully; see the comment at each site.
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: needs the built local index, Ollama (bge-m3) and the reranker model; skipped unless RUN_INTEGRATION=1",
+]

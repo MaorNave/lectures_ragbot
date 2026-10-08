@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline dashboard · SmartUp Assistant</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --card: #ffffff; --soft: #f3f4f6;
+    --primary: #1f4ed8; --primary-soft: #eef2ff; --ok: #15803d; --ok-soft: #dcfce7; --warn: #b45309; --warn-soft: #fef3c7;
+    --bad: #b91c1c; --bad-soft: #fee2e2;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Hebrew", "Heebo", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--font); color: var(--fg); background: var(--bg); display: flex; flex-direction: column; font-size: 14px; }
+  a { color: var(--primary); }
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); }
+  header .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 700; display: grid; place-items: center; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  .pill { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--muted); white-space: nowrap; }
+  .pill i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-inline-end: 6px; vertical-align: middle; }
+  .pill.ok i { background: var(--ok); } .pill.down i { background: var(--bad); }
+  .testbar { display: flex; gap: 8px; align-items: center; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .testbar input[type=text] { flex: 1 1 420px; min-width: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; }
+  .testbar input[type=text]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(31,78,216,.12); }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 8px 14px; background: var(--primary); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  label.chk { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+  .testbar .result { font-size: 12px; color: var(--muted); }
+  main { flex: 1; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px 20px; min-height: 0; }
+  .col { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow-y: auto; min-height: 0; }
+  #list { padding: 8px; }
+  #list .empty { color: var(--muted); padding: 14px; font-size: 13px; }
+  .call { display: block; width: 100%; text-align: start; background: #fff; color: var(--fg); border: 1px solid transparent; border-radius: 10px; padding: 9px 10px; margin-bottom: 4px; cursor: pointer; }
+  .call:hover { background: var(--soft); }
+  .call.sel { border-color: var(--primary); background: var(--primary-soft); }
+  .call .q { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .call .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 11px; color: var(--muted); align-items: center; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
+  .dot.answered { background: var(--ok); } .dot.refused, .dot.not_found { background: var(--warn); } .dot.error { background: var(--bad); }
+  .dot.chit_chat { background: #7c3aed; }
+  .dot.running { background: var(--primary); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #detail { padding: 16px 18px 40px; }
+  #detail .empty { color: var(--muted); padding: 40px 10px; text-align: center; }
+  .card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; background: #fff; }
+  .card.nested { margin-inline-start: 26px; border-inline-start: 3px solid var(--primary-soft); }
+  .card h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h3 .num { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; display: grid; place-items: center; flex: 0 0 auto; }
+  .card h3 .dur { margin-inline-start: auto; font-weight: 500; color: var(--muted); font-size: 12px; }
+  .card .what { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+  .question { font-size: 18px; font-weight: 650; margin: 2px 0 8px; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--fg); white-space: nowrap; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); } .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); } .badge.blue { background: var(--primary-soft); color: var(--primary); }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 10px; }
+  .metric { background: var(--soft); border-radius: 10px; padding: 8px 10px; }
+  .metric .k { font-size: 11px; color: var(--muted); } .metric .v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; font-size: 13px; }
+  .kv .k { color: var(--muted); } .kv .v { overflow-wrap: anywhere; }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+  .stats { font-size: 12px; color: var(--muted); margin: 6px 0; font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--fg); }
+  .funnel { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; font-size: 12px; }
+  .funnel .n { background: var(--primary-soft); color: var(--primary); font-weight: 700; border-radius: 8px; padding: 2px 8px; }
+  .funnel .arrow { color: var(--muted); }
+  table.passages { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.passages th { text-align: start; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); padding: 4px 6px; }
+  table.passages td { border-bottom: 1px solid var(--soft); padding: 5px 6px; vertical-align: top; }
+  table.passages tr.dropped td { color: var(--muted); text-decoration: line-through; }
+  .scorebar { position: relative; width: 90px; height: 8px; border-radius: 4px; background: var(--soft); margin-top: 4px; }
+  .scorebar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--ok); }
+  .scorebar i.mid { background: var(--warn); } .scorebar i.low { background: var(--bad); }
+  .scorebar .mark { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--fg); opacity: .35; }
+  details summary { cursor: pointer; color: var(--primary); font-size: 12px; }
+  .passage-text { white-space: pre-wrap; font-size: 12px; background: var(--soft); border-radius: 8px; padding: 8px 10px; margin-top: 4px; max-height: 260px; overflow: auto; }
+  pre.prompt { white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 12px; max-height: 420px; overflow: auto; }
+  .answer { white-space: pre-wrap; font-size: 14px; line-height: 1.5; background: var(--soft); border-radius: 10px; padding: 12px 14px; }
+  ul.plain { margin: 4px 0; padding-inline-start: 18px; font-size: 13px; }
+  /* timeline */
+  .tl-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 64px; gap: 8px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .tl-row .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-row .lbl.d1 { padding-inline-start: 14px; color: var(--muted); }
+  .tl-track { position: relative; height: 14px; background: var(--soft); border-radius: 4px; }
+  .tl-bar { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--primary); min-width: 2px; }
+  .tl-bar.llm { background: #7c3aed; } .tl-bar.search { background: #0891b2; } .tl-bar.code { background: #64748b; }
+  .tl-bar.running { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px); animation: slide 1s linear infinite; }
+  @keyframes slide { to { background-position: 24px 0; } }
+  .tl-first { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ok); }
+  .tl-row .ms { text-align: end; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 4px; vertical-align: -1px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } #list { max-height: 220px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SU</div>
+  <div>
+    <h1>Pipeline dashboard</h1>
+    <div class="sub">Every chat call, step by step: the query, the passages fetched, how the answer was decided and written</div>
+  </div>
+  <div class="spacer"></div>
+  <a href="/" class="pill">← Back to the chat</a>
+  <span id="live" class="pill"><i></i>connecting…</span>
+</header>
+
+<div class="testbar">
+  <input id="q" type="text" dir="auto" maxlength="2000" placeholder="Ask a test question (Hebrew or English) — or just use the chat; every call shows up here">
+  <button id="send" type="button">Send</button>
+  <label class="chk"><input id="same" type="checkbox"> same conversation</label>
+  <label class="chk"><input id="follow" type="checkbox" checked> follow the newest call</label>
+  <span id="testresult" class="result"></span>
+</div>
+
+<main>
+  <section class="col" id="list" aria-label="Chat calls"><div class="empty">loading…</div></section>
+  <section class="col" id="detail" aria-label="Call detail"><div class="empty">Select a call on the left.</div></section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  // --------------------------------------------------------------------------------------- helpers
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.indexOf('on') === 0) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, kid) {
+    if (kid === null || kid === undefined || kid === false) return;
+    if (Array.isArray(kid)) { kid.forEach(function (k) { add(el, k); }); return; }
+    el.appendChild(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  function ms(v) {
+    if (v === null || v === undefined) return '–';
+    return v >= 1000 ? (v / 1000).toFixed(1) + ' s' : Math.round(v) + ' ms';
+  }
+  function sec(v) { return v === null || v === undefined ? '–' : Number(v).toFixed(1) + ' s'; }
+  function clock(epoch) { var d = new Date(epoch * 1000); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  function json(v) { return v === null || v === undefined ? '–' : (typeof v === 'string' ? v : JSON.stringify(v)); }
+  function getJSON(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) throw new Error('not-allowed');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  function statusBadge(status, running) {
+    if (running) return h('span', { class: 'badge blue', text: 'running…' });
+    var cls = { answered: 'ok', refused: 'warn', not_found: 'warn', chit_chat: 'blue', error: 'bad' }[status] || '';
+    return h('span', { class: 'badge ' + cls, text: status || '–' });
+  }
+  function scoreClass(v, t) { return v >= t.strong ? '' : v >= t.weak ? 'mid' : 'low'; }
+  function scoreBar(v, t) {
+    var bar = h('div', { class: 'scorebar', title: 'rerank score ' + v });
+    if (v !== null && v !== undefined) {
+      bar.appendChild(h('i', { class: scoreClass(v, t), style: 'width:' + Math.max(2, Math.min(100, v * 100)) + '%' }));
+      bar.appendChild(h('span', { class: 'mark', style: 'left:' + t.weak * 100 + '%', title: 'below ' + t.weak + ': not enough' }));
+      bar.appendChild(h('span', { class: 'mark', style: 'left:' + t.strong * 100 + '%', title: 'from ' + t.strong + ': enough without the LLM grader' }));
+    }
+    return bar;
+  }
+  function llmLine(llm) {
+    if (!llm || !llm.output_tokens && !llm.prompt_tokens) return null;
+    return h('div', { class: 'stats' },
+      'LLM ', h('b', { text: llm.model || '' }), ' · reading the prompt (', h('b', { text: String(llm.prompt_tokens || 0) }), ' tokens) ',
+      h('b', { text: sec(llm.prompt_s) }), ' · writing ', h('b', { text: String(llm.output_tokens || 0) }), ' tokens in ',
+      h('b', { text: sec(llm.output_s) }), llm.tokens_per_s ? ' (' + llm.tokens_per_s + ' tok/s)' : '',
+      llm.load_s > 1 ? h('span', null, ' · model load ', h('b', { text: sec(llm.load_s) })) : null);
+  }
+  function kv(pairs) {
+    var box = h('div', { class: 'kv' });
+    pairs.forEach(function (p) { if (p[1] === undefined) return; box.appendChild(h('div', { class: 'k', text: p[0] })); box.appendChild(h('div', { class: 'v', dir: 'auto' }, p[1] instanceof Node ? p[1] : json(p[1]))); });
+    return box;
+  }
+
+  // --------------------------------------------------------------------------------------- step explanations
+  var WHAT = {
+    'prepare': 'Reads the latest message and detects its language from its letters (Hebrew or English).',
+    'classify': 'LLM call 1 — is the question in scope, what kind is it, does it name a lecture or a course version? Code then applies deterministic corrections (lecture numbers, v1/v2 wording).',
+    'retrieve': 'Decides what to search: v2 first (the TEDx talk, v1 or the Digital Innovation course directly when the user names it), and which filters apply. When v2 looks weak it also starts the fallback searches in the background. Each search of the local index is shown below it.',
+    'search': 'Hybrid search of the local index — meaning-based (bge-m3 embeddings in Chroma), keyword (SQLite FTS5 BM25) and metadata legs fused with RRF — then a local cross-encoder re-scores the candidates. The top passages become the model’s evidence.',
+    'grade': 'Is the evidence good enough? Best rerank score ≥ 0.70: yes, no LLM needed. Below 0.03: no. In between: LLM call 2 judges the passages — reading them exactly as the answer prompt will present them, so the answer call can continue from that reading.',
+    'fallback': 'v2 did not have it, so the search moves down the source order — Yonatan\u2019s TEDx talk, then the v1 course, then the other lectures outside the course — and stops at the first source that answers. The searches run in parallel (usually while v2 was still being graded); each source is then graded on its own, in order. A weak source is rejected without an LLM call when a later source already has a strong match.',
+    'generate': 'LLM call 3 writes the answer from the passages, streaming tokens to the chat as they are produced. After an LLM grade it starts from the grader’s cached reading of the passages, so its prompt takes only a second or two.',
+    'verify': 'Code checks every citation against the lectures retrieved in this turn, removes invented ones, and rebuilds the Sources list.',
+    'refuse': 'Out-of-scope question: a fixed refusal text is returned — no LLM writes it.',
+    'greeting': 'Greeting or question about the bot: a fixed welcome text is returned.',
+    'repeat': 'The same question was already answered in this conversation: that answer — verified when it was written — is returned again with its sources, and a note saying so. No search, no LLM.',
+    'not found': 'Nothing good enough was found: a fixed “not found” text plus the closest lecture topics.'
+  };
+  function kindOf(step) {
+    var s = step.split(' ')[0];
+    return s === 'not' ? 'not found' : s;
+  }
+  function barKind(step) {
+    var k = kindOf(step);
+    if (k === 'classify' || k === 'generate' || k === 'grade' || k === 'fallback') return 'llm';
+    if (k === 'search' || k === 'retrieve') return 'search';
+    return 'code';
+  }
+
+  // --------------------------------------------------------------------------------------- state
+  var listEl = document.getElementById('list'), detailEl = document.getElementById('detail'), live = document.getElementById('live');
+  var follow = document.getElementById('follow');
+  var selected = (location.hash || '').slice(1) || null;
+  if (selected) follow.checked = false;
+  var newestSeen = null, detailTimer = null, lastDetail = null, threadId = null;
+
+  function setLive(ok, text) { live.className = 'pill ' + (ok ? 'ok' : 'down'); live.lastChild.textContent = text; }
+
+  // --------------------------------------------------------------------------------------- list
+  function renderList(data) {
+    var traces = data.traces || [];
+    setLive(true, 'live · ' + traces.length + ' of the last ' + data.limit + ' calls · mode ' + data.mode);
+    if (!traces.length) {
+      listEl.replaceChildren(h('div', { class: 'empty', text: 'No chat calls yet. Ask something in the chat, or type a test question above — every call appears here.' }));
+      return;
+    }
+    if (follow.checked && traces[0].id !== newestSeen) select(traces[0].id);
+    newestSeen = traces[0].id;
+    if (!selected) select(traces[0].id);
+    listEl.replaceChildren.apply(listEl, traces.map(function (t) {
+      return h('button', { class: 'call' + (t.id === selected ? ' sel' : ''), type: 'button', onclick: function () { follow.checked = false; select(t.id); } },
+        h('div', { class: 'q', dir: 'auto', text: t.question || '(empty)' }),
+        h('div', { class: 'meta' },
+          h('span', { class: 'dot ' + (t.running ? 'running' : (t.status || '')) }),
+          clock(t.started_at),
+          t.language ? '· ' + t.language : null, t.intent ? '· ' + t.intent : null,
+          t.running ? '· ' + (t.current_step || 'starting') + '…' : '· ' + ms(t.total_ms),
+          t.first_token_ms ? '· first words ' + ms(t.first_token_ms) : null));
+    }));
+  }
+  function pollList() {
+    getJSON('/debug/traces').then(function (data) {
+      renderList(data);
+      var anyRunning = (data.traces || []).some(function (t) { return t.running; });
+      setTimeout(pollList, anyRunning ? 1000 : 2500);
+    }).catch(function (err) {
+      if (err.message === 'not-allowed') {
+        setLive(false, 'dashboard disabled or not allowed from this address');
+        listEl.replaceChildren(h('div', { class: 'empty', text: 'The API does not share traces with this address. It shows them to requests from the same machine by default (DEBUG_DASHBOARD=local); set DEBUG_DASHBOARD=on to allow others, or off to disable tracing.' }));
+        return;
+      }
+      setLive(false, 'API unreachable — retrying');
+      setTimeout(pollList, 4000);
+    });
+  }
+
+  // --------------------------------------------------------------------------------------- detail
+  function select(id) {
+    selected = id;
+    lastDetail = null;
+    if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+    [].forEach.call(listEl.querySelectorAll('.call'), function (b) { b.classList.remove('sel'); });
+    clearTimeout(detailTimer);
+    loadDetail(id);
+  }
+  function loadDetail(id) {
+    getJSON('/debug/traces/' + encodeURIComponent(id)).then(function (tr) {
+      if (id !== selected) return;
+      var sig = JSON.stringify([tr.running, tr.steps.length, tr.total_ms, tr.steps.map(function (s) { return s.running; })]);
+      if (sig !== lastDetail) { lastDetail = sig; renderDetail(tr); }
+      if (tr.running) detailTimer = setTimeout(function () { loadDetail(id); }, 800);
+    }).catch(function () {
+      if (id === selected) detailEl.replaceChildren(h('div', { class: 'empty', text: 'This call is no longer kept (only the most recent calls are).' }));
+    });
+  }
+
+  function renderDetail(tr) {
+    var total = tr.total_ms || 1;
+    var thresholds = { weak: 0.03, strong: 0.70 };
+    tr.steps.forEach(function (s) { if (s.thresholds && s.thresholds.fast_sufficient_at) thresholds = { weak: s.thresholds.fast_insufficient_below, strong: s.thresholds.fast_sufficient_at }; });
+    var llmCalls = tr.steps.filter(function (s) { return s.llm && (s.llm.output_tokens || s.llm.prompt_tokens); }).length;
+
+    var summary = h('div', { class: 'card' },
+      h('div', { class: 'question', dir: 'auto', text: tr.question }),
+      h('div', { class: 'badges' }, statusBadge(tr.status, tr.running),
+        tr.language ? h('span', { class: 'badge', text: tr.language === 'he' ? 'Hebrew' : 'English' }) : null,
+        tr.intent ? h('span', { class: 'badge', text: 'intent: ' + tr.intent }) : null,
+        h('span', { class: 'badge', text: tr.endpoint }),
+        h('span', { class: 'badge mono', title: 'conversation id', text: 'thread ' + (tr.thread_id || '').slice(0, 8) })),
+      h('div', { class: 'metrics' },
+        metric('First words', tr.first_token_ms ? ms(tr.first_token_ms) : (tr.endpoint === '/chat' ? 'n/a (not streamed)' : '–')),
+        metric(tr.running ? 'Elapsed' : 'Full answer', ms(tr.total_ms)),
+        metric('Steps', String(tr.steps.length)),
+        metric('LLM calls', String(llmCalls)),
+        metric('Started', clock(tr.started_at))));
+
+    var tl = h('div', { class: 'card' }, h('h3', null, 'Timeline'),
+      h('div', { class: 'what', text: 'Where the time went. Nested searches are indented under the step that ran them; the green line marks the first words reaching the chat.' }));
+    tr.steps.forEach(function (s) {
+      var dur = s.running ? Math.max(0, total - s.start_ms) : (s.duration_ms || 0);
+      var track = h('div', { class: 'tl-track' },
+        h('div', { class: 'tl-bar ' + barKind(s.step) + (s.running ? ' running' : ''), style: 'left:' + (s.start_ms / total * 100) + '%;width:' + Math.max(0.4, dur / total * 100) + '%' }));
+      if (tr.first_token_ms) track.appendChild(h('div', { class: 'tl-first', style: 'left:' + (tr.first_token_ms / total * 100) + '%' }));
+      tl.appendChild(h('div', { class: 'tl-row' }, h('div', { class: 'lbl' + (s.depth ? ' d1' : ''), text: s.step }), track, h('div', { class: 'ms', text: s.running ? '…' : ms(dur) })));
+    });
+    tl.appendChild(h('div', { class: 'legend' },
+      h('span', null, h('i', { style: 'background:#7c3aed' }), 'LLM step'), h('span', null, h('i', { style: 'background:#0891b2' }), 'search'),
+      h('span', null, h('i', { style: 'background:#64748b' }), 'code only'), h('span', null, h('i', { style: 'background:var(--ok)' }), 'first words')));
+
+    var cards = tr.steps.map(function (s, i) { return stepCard(s, i + 1, thresholds); });
+
+    var answer = null;
+    if (!tr.running) {
+      answer = h('div', { class: 'card' }, h('h3', null, 'Final answer sent to the chat'),
+        tr.error ? h('div', { class: 'badge bad', text: tr.error }) : null,
+        h('div', { class: 'answer', dir: 'auto', text: tr.answer || '(no answer)' }),
+        tr.citations && tr.citations.length ? h('div', { class: 'stats' }, 'Cited: ', tr.citations.map(function (c) { return c.citation; }).join(' · ')) : null);
+    }
+    var raw = h('details', { class: 'card' }, h('summary', { text: 'Raw trace JSON' }), h('pre', { class: 'prompt', text: JSON.stringify(tr, null, 2) }));
+    detailEl.replaceChildren.apply(detailEl, [summary, tl].concat(cards, [answer, raw]).filter(Boolean));
+  }
+  function metric(k, v) { return h('div', { class: 'metric' }, h('div', { class: 'k', text: k }), h('div', { class: 'v', text: v })); }
+
+  function stepCard(s, n, t) {
+    var kind = kindOf(s.step);
+    var card = h('div', { class: 'card' + (s.depth ? ' nested' : '') },
+      h('h3', null, h('span', { class: 'num', text: String(n) }), s.step,
+        s.running ? h('span', { class: 'badge blue', text: 'running…' }) : null,
+        s.error ? h('span', { class: 'badge bad', text: 'error' }) : null,
+        h('span', { class: 'dur', text: s.running ? '' : ms(s.duration_ms) + ' · at ' + ms(s.start_ms) })),
+      h('div', { class: 'what', text: WHAT[kind] || '' }));
+    if (s.running) return card;
+    var body = ({ prepare: prepareBody, classify: classifyBody, retrieve: retrieveBody, search: searchBody, grade: gradeBody,
+      fallback: gradeBody, generate: generateBody, verify: verifyBody })[kind];
+    add(card, body ? body(s, t) : kv(Object.keys(s).filter(function (k) { return ['step', 'start_ms', 'duration_ms', 'running', 'depth'].indexOf(k) < 0; }).map(function (k) { return [k, s[k]]; })));
+    if (s.error) add(card, h('div', { class: 'badge bad', text: s.error }));
+    return card;
+  }
+  function prepareBody(s) {
+    return kv([['language', s.language === 'he' ? 'Hebrew' : 'English'], ['earlier messages', String(s.history_messages || 0)]]);
+  }
+  function classifyBody(s) {
+    var d = s.decision || {};
+    var out = [kv([
+      ['in scope', d.in_scope ? 'yes' : 'no'], ['intent', d.intent], ['lecture', d.lecture_number === null ? '–' : d.lecture_number],
+      ['part', d.lecture_part || '–'], ['version scope', d.version_scope], ['search query', s.search_query],
+      ['JSON asked for', s.schema + (s.shared_prefix ? ' (shares the cached instructions prefix)' : '')]
+    ])];
+    var ov = s.code_overrides || {};
+    if (Object.keys(ov).length) {
+      out.push(h('div', { class: 'stats' }, 'Corrected by code: ', Object.keys(ov).map(function (k) { return k + ' ' + json(ov[k][0]) + ' → ' + json(ov[k][1]); }).join(' · ')));
+    }
+    out.push(llmLine(s.llm));
+    if (s.llm && s.llm.prompt_s > 15) out.push(h('div', { class: 'badge warn', text: 'Slow prompt: the shared-prompt cache was lost (model reload?). The server re-primes it when idle.' }));
+    return out;
+  }
+  function retrieveBody(s) {
+    return kv([['version scope', s.version_scope], ['query sent', s.search_query],
+      ['homework keywords added', s.homework_hints ? 'yes' : 'no'], ['lecture filter', s.lecture_filter === null ? 'none' : s.lecture_filter],
+      ['lecture summaries added', s.summaries_added && Object.keys(s.summaries_added).length ? s.summaries_added : 'none'],
+      ['passages handed on', String(s.passages_total)]]);
+  }
+  function searchBody(s, t) {
+    var f = s.filters || {};
+    var out = [kv([['index', s.index], ['query', s.query], ['language', s.lang],
+      ['filters', 'source=' + (f.tier || f.course_version || 'any') + (f.lecture_number !== null && f.lecture_number !== undefined ? ' · lecture=' + f.lecture_number : '') + (f.lecture_part ? ' · part=' + f.lecture_part : '')],
+      ['search legs (RRF)', (s.legs || []).join(' · ')]])];
+    out.push(h('div', { class: 'funnel' },
+      h('span', { class: 'n', text: String(s.candidates) }), 'candidates after RRF', h('span', { class: 'arrow', text: '→' }),
+      h('span', { class: 'n', text: String(s.after_dedupe) }), 'after removing repeats', h('span', { class: 'arrow', text: '→' }),
+      h('span', { class: 'n', text: String(s.reranked_kept) }), 'best after reranking', h('span', { class: 'arrow', text: '→' }),
+      h('span', { class: 'n', text: String((s.passages || []).length) }), 'passages kept' +
+        ((s.dropped_translations || []).length ? ' (' + s.dropped_translations.length + ' duplicate translation' + (s.dropped_translations.length > 1 ? 's' : '') + ' dropped)' : '')));
+    if (s.dense_error) out.push(h('div', { class: 'badge warn', text: 'dense leg skipped: ' + s.dense_error }));
+    out.push(h('div', { class: 'stats' }, 'embed ', h('b', { text: ms(s.embed_ms) }), ' · Chroma ', h('b', { text: ms(s.dense_ms) }),
+      ' · FTS5 ', h('b', { text: ms(s.keyword_ms) }), ' · rerank ', h('b', { text: ms(s.rerank_ms) }),
+      ' · scores below ' + (s.thresholds ? s.thresholds.min_rerank_score : 0.02) + ' are dropped as noise'));
+    var rows = (s.passages || []).map(function (p) { return passageRow(p, t, false); })
+      .concat((s.dropped_translations || []).map(function (p) { return passageRow(p, t, true); }));
+    if (rows.length) {
+      out.push(h('table', { class: 'passages' },
+        h('thead', null, h('tr', null, h('th', { text: '#' }), h('th', { text: 'rerank' }), h('th', { text: 'lecture' }), h('th', { text: 'lang' }), h('th', { text: 'passage' }))),
+        h('tbody', null, rows)));
+    } else {
+      out.push(h('div', { class: 'badge warn', text: 'No passages came back.' }));
+    }
+    return out;
+  }
+  function passageRow(p, t, dropped) {
+    var snippet = (p.text || '').replace(/\s+/g, ' ').slice(0, 150);
+    return h('tr', { class: dropped ? 'dropped' : '' },
+      h('td', { text: dropped ? '–' : String(p.rank) }),
+      h('td', null, p.rerank_score == null ? '–' : p.rerank_score.toFixed(3), scoreBar(p.rerank_score, t)),
+      h('td', null, h('div', { text: p.citation }), p.section_topic ? h('div', { class: 'stats', text: p.section_topic }) : null,
+        dropped ? h('div', { class: 'stats', text: 'dropped: same passage as one above, in the other language' }) : null),
+      h('td', { text: p.lang }),
+      h('td', null, h('details', null, h('summary', { dir: 'auto', text: snippet + (p.text && p.text.length > 150 ? '…' : '') + ' (' + p.chars + ' chars)' }),
+        h('div', { class: 'passage-text', dir: 'auto', text: p.text }))));
+  }
+  function gradeBody(s, t) {
+    var verdictCls = s.verdict === 'sufficient' ? 'ok' : s.verdict === 'partial' ? 'warn' : 'bad';
+    var how = { fast: 'decided by the rerank score alone (no LLM)', llm: 'LLM call 2 judged the passages', skip: 'skipped: ' + (s.reason || ''),
+      'skip-weak': 'no LLM call: ' + (s.reason || 'weak, and a later source has a strong match'), error: 'the grader failed; decided by the rerank score' }[s.method] || s.method;
+    return [
+      h('div', { class: 'badges' }, h('span', { class: 'badge ' + verdictCls, text: s.verdict }), h('span', { class: 'badge', text: how }),
+        s.decision ? h('span', { class: 'badge blue', text: 'decision: ' + s.decision }) : null),
+      s.best_score !== null && s.best_score !== undefined ? h('div', { class: 'stats' }, 'Best rerank score ', h('b', { text: s.best_score.toFixed(3) }),
+        ' of ' + s.passages + ' passages (fast yes from ' + t.strong + ', fast no below ' + t.weak + ')', scoreBar(s.best_score, t)) : null,
+      s.prompt_layout ? kv([['grader prompt', s.prompt_layout]]) : null,
+      s.searched_while_v2_was_graded ? h('div', { class: 'badge', text: 'Searched in the background while v2 was being graded.' }) : null,
+      llmLine(s.llm)];
+  }
+  function generateBody(s) {
+    var out = [llmLine(s.llm)];
+    if (s.after_grader_reading) out.push(h('div', { class: 'badge', text: 'Continued from the grader’s reading of these passages (cached by Ollama).' }));
+    if (s.stopped_early) out.push(h('div', { class: 'badge warn', text: 'The client left: generation was stopped early.' }));
+    out.push(kv([['passages in the prompt', (s.passages || []).length + ' — ' + (s.passages || []).join(' · ')],
+      ['earlier messages replayed', String(s.history_messages || 0)],
+      ['guidance notes', s.guidance_notes && s.guidance_notes.length ? s.guidance_notes.join(' | ') : 'none'],
+      ['system prompt', (s.system_prompt_chars || 0).toLocaleString() + ' characters (instructions.md + runtime rules)']]));
+    out.push(h('details', null, h('summary', { text: 'Show the exact prompt the model received (user turn)' }), h('pre', { class: 'prompt', dir: 'auto', text: s.prompt || '' })));
+    return out;
+  }
+  function verifyBody(s) {
+    return [kv([['status', s.status], ['citations kept', (s.citations_kept || []).length ? s.citations_kept.join(' · ') : 'none'],
+      ['citations removed', (s.citations_removed || []).length ? s.citations_removed.join(' · ') : 'none'],
+      ['model declined to answer', s.model_declined ? 'yes' : 'no'], ['Sources list added', s.sources_list_added ? 'yes' : 'no']])];
+  }
+
+  // --------------------------------------------------------------------------------------- test question
+  var qEl = document.getElementById('q'), sendBtn = document.getElementById('send'), result = document.getElementById('testresult');
+  function sendTest() {
+    var text = qEl.value.trim();
+    if (!text) return;
+    sendBtn.disabled = true; follow.checked = true; result.textContent = 'sent — watch it below…';
+    var body = { message: text };
+    if (document.getElementById('same').checked && threadId) body.thread_id = threadId;
+    fetch('/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' }, body: JSON.stringify(body) })
+      .then(function (res) {
+        if (res.status === 429) throw new Error('the assistant is busy (429)');
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+        var reader = res.body.getReader(), decoder = new TextDecoder(), buf = '';
+        function pump() {
+          return reader.read().then(function (r) {
+            if (r.done) return;
+            buf += decoder.decode(r.value, { stream: true });
+            var idx;
+            while ((idx = buf.indexOf('\n\n')) >= 0) {
+              var frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+              if (frame.indexOf('event: final') === 0) {
+                var data = JSON.parse(frame.split('\n').filter(function (l) { return l.indexOf('data:') === 0; }).map(function (l) { return l.slice(5).trim(); }).join(''));
+                threadId = data.thread_id;
+                result.textContent = 'done: ' + data.status + ' in ' + ms(data.elapsed_ms);
+              } else if (frame.indexOf('event: error') === 0) {
+                result.textContent = 'error — see the trace';
+              }
+            }
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (err) { result.textContent = String(err.message || err); })
+      .then(function () { sendBtn.disabled = false; qEl.select(); });
+  }
+  sendBtn.addEventListener('click', sendTest);
+  qEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) sendTest(); });
+  window.addEventListener('hashchange', function () { var id = location.hash.slice(1); if (id && id !== selected) { follow.checked = false; select(id); } });
+
+  if (selected) select(selected);  // opened via a "trace ↗" link: show that call straight away
+  pollList();
+})();
+</script>
+</body>
+</html>

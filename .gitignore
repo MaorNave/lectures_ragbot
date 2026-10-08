@@ -1,0 +1,26 @@
+# Python and tooling
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Local configuration (copy .env.example to .env)
+.env
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Data: the repository ships only the lecture documents the index is built from (data/raw/drive_09_2026).
+# Everything else under data/ is generated locally: data/index/ (`smartup ingest`), data/eval_results/
+# (`smartup eval`), data/logs/.
+/data/*
+!/data/raw/
+/data/raw/*
+!/data/raw/drive_09_2026/
+*.log
