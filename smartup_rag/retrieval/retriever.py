@@ -13,6 +13,7 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
+from smartup_rag.config import get_settings
 from smartup_rag.lang import Lang
 from smartup_rag.retrieval import queries as Q
 from smartup_rag.retrieval.hybrid import retrieve
@@ -38,7 +39,9 @@ def get_lectures(
     include_summaries: bool = True,
 ) -> list[dict[str, Any]]:
     """Lectures (metadata + summaries) from the catalogue, sorted by version/number/part; `tier` filters."""
-    where_sql, params = Q.sql_where(Q.conditions(tier, lecture_number), alias="l")
+    # the same Digital Innovation switch as passage search, so an index built with it still hides its summaries
+    exclude = [] if get_settings().include_digital_innovation else [Q.DIGITAL_INNOVATION_COURSE_ID]
+    where_sql, params = Q.sql_where(Q.conditions(tier, lecture_number, exclude_course_ids=exclude), alias="l")
     out: list[dict[str, Any]] = []
     for row in get_index().lectures(where_sql, params):
         course_id, version = row["course_id"], row["course_version"]

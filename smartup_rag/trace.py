@@ -51,7 +51,7 @@ class Trace:
         with self.lock:
             return {
                 "id": self.id,
-                "thread_id": self.thread_id,
+                "thread_id": self.thread_id[:8],  # enough to group a conversation; the full id would let a reader continue it
                 "question": self.question[:200],
                 "endpoint": self.endpoint,
                 "started_at": self.started_at,

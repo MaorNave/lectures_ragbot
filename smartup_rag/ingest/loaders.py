@@ -54,10 +54,19 @@ def _text(value: Any) -> str:
     return str(value or "")
 
 
+# the subject tagger's own chatter, left in some exports (v1 Lecture 6: "Looking at this lecture transcript", …)
+_SUBJECT_CHATTER_RE = re.compile(r"^(?:looking at|i need to|let me|here (?:are|is))\b", re.IGNORECASE)
+
+
 def _subjects(value: Any) -> list[str]:
     if isinstance(value, str):
         value = [value]
-    return [_WS_RE.sub(" ", str(v)).strip() for v in (value or []) if str(v).strip()]
+    out = []
+    for v in value or []:
+        v = _WS_RE.sub(" ", str(v)).strip().strip('[]"').strip()  # a JSON list split into items keeps its brackets
+        if v and not _SUBJECT_CHATTER_RE.match(v):
+            out.append(v)
+    return out
 
 
 def is_digital_innovation(doc: dict[str, Any]) -> bool:

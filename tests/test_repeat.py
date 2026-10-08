@@ -120,3 +120,15 @@ def test_a_greeting_said_twice_is_not_called_the_same_question(agent):
     ask("hi")
     second = ask("hi")
     assert second["status"] == "chit_chat" and P.REPEAT_NOTE["en"] not in second["answer"] and calls["classify"] == 2
+
+
+def test_a_short_follow_up_after_a_different_question_is_not_a_repeat(agent):
+    ask, calls = agent
+    ask("What is PMF?")
+    ask("tell me more")
+    ask("How should I price my product?")
+    ask("tell me more")  # about pricing now, not PMF
+    assert calls["generate"] == 4
+    ask("How should I price my product?")  # a repeat
+    ask("tell me more")  # same words after the same question: the logged answer fits
+    assert calls["generate"] == 4

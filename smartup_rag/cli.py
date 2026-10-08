@@ -486,7 +486,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if run is None:
         return 1
     try:
-        result = run(full=args.full, limit=args.limit, filter_lecture=not args.no_lecture_filter)
+        result = run(full=args.full, limit=args.limit, filter_lecture=not args.no_lecture_filter, quiet=args.json)
     except Exception as exc:
         _err(f"eval failed: {type(exc).__name__}: {exc}")
         log.debug("eval traceback", exc_info=True)
@@ -513,6 +513,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             port=port,
             reload=args.reload,
             log_level=(s.log_level or "info").lower(),
+            timeout_keep_alive=120,  # as smartup_rag.api.app.main: a slow answer's stream outlives uvicorn's 5 s default
         )
     except Exception as exc:
         _err(f"server failed to start: {type(exc).__name__}: {exc}")

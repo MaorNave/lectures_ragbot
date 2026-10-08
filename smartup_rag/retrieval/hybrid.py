@@ -156,7 +156,6 @@ def search_passages(
     lang: Lang,
     tier: str | None = None,
     lecture_number: int | None = None,
-    course_id: str | None = None,
     *,
     stats: dict[str, Any] | None = None,
 ) -> list[Candidate]:
@@ -170,7 +169,7 @@ def search_passages(
     stats = stats if stats is not None else {}
     window = s.rank_window
     conds = Q.conditions(
-        tier, lecture_number, course_id, None if s.cross_lingual else lang,
+        tier, lecture_number, None, None if s.cross_lingual else lang,
         exclude_course_ids=[] if s.include_digital_innovation else [Q.DIGITAL_INNOVATION_COURSE_ID],
     )
 
@@ -259,6 +258,11 @@ def is_translation(a: Candidate, b: Candidate, lengths: dict[tuple[str, str], in
     if (he.section_index < 0) != (en.section_index < 0):  # a lecture summary is never a transcript passage
         return False
     if he.section_index >= 0:
+        # some v1 Hebrew transcripts cover only the end of the lecture (a fifth of the English length, not ~¾):
+        # relative positions do not line up there, so no pair is called a translation
+        he_total, en_total = lengths.get((he.lecture_key, "he")) or 0, lengths.get((en.lecture_key, "en")) or 0
+        if not he_total or not en_total or he_total / en_total < 0.5:
+            return False
         spans = []
         for c in (he, en):
             total = lengths.get((c.lecture_key, c.lang)) or 0

@@ -35,7 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from smartup_rag import trace
+from smartup_rag import __version__, trace
 from smartup_rag.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -93,6 +93,9 @@ class _RateLimiter:
         q = self._hits[client]
         while q and now - q[0] > 60.0:
             q.popleft()
+        if not q:  # a client gone quiet leaves no entry behind
+            del self._hits[client]
+            q = self._hits[client]
         if len(q) >= self.per_minute:
             return False
         q.append(now)
@@ -233,7 +236,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         lifespan=lifespan,
         title="SmartUp Academy Assistant API",
-        version="0.1.0",
+        version=__version__,
         description="Chatbot that answers only from the SmartUp Academy lecture transcripts (HE / EN).",
         responses={429: {"model": ErrorDetail, "description": "The assistant is busy"}},
         docs_url="/docs" if s.api_docs_enabled else None,
@@ -291,8 +294,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         ollama, index = await asyncio.gather(_safe_health(ollama_health, "ollama"), _safe_health(index_health, "index"))
         reranker = {"enabled": s.rerank_enabled, **get_reranker().status()}
-        if reranker.get("error"):  # internals stay in the log; the page only needs to know it is not working
-            reranker["error"] = "unavailable"
+        for part in (ollama, index, reranker):  # internals stay in the log; the page only needs to know it is not working
+            if part.get("error"):
+                part["error"] = "unavailable"
         ok = (bool(ollama.get("ok")) and bool(ollama.get("model_present", True))
               and bool(ollama.get("embed_model_present", True)) and bool(index.get("ok")))
         return HealthResponse(

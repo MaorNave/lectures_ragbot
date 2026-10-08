@@ -96,11 +96,8 @@ def warm_up() -> float:
     from smartup_rag.agent.prompts import system_prompt
 
     t0 = time.perf_counter()
-    llm = get_llm("chat")
-    llm.invoke(
-        [SystemMessage(content=system_prompt()), HumanMessage(content="Reply with one word: ready.")],
-        config={"max_tokens": 1},
-    )
+    llm = get_llm("chat").model_copy(update={"num_predict": 1})  # same num_ctx, so no model reload
+    llm.invoke([SystemMessage(content=system_prompt()), HumanMessage(content="Reply with one word: ready.")])
     _cold_cache.clear()
     return time.perf_counter() - t0
 

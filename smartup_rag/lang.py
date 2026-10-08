@@ -23,7 +23,7 @@ _LATIN_WORD_RE = re.compile(r"[A-Za-z][A-Za-z.'-]*")
 # The title is lazy and cannot cross ')' ; quotes / markdown emphasis on either side are optional.
 CITATION_RE = re.compile(
     r"\(\s*(?P<version>v[12])\s*,\s*(?:Lecture|Lesson|הרצאה|שיעור)\s*(?P<num>\d+)"
-    r"(?:\s*(?:Part|חלק)\s*(?P<part>\d+))?"
+    r"(?:\s*,?\s*(?:Part|חלק)\s*(?P<part>\d+))?"
     r"\s*(?:[—–\-:,]\s*)?"
     r"(?:[\"“”'’]|\*{1,2})?(?P<title>[^)]*?)(?:[\"“”'’]|\*{1,2})?\s*\)",
     re.IGNORECASE,

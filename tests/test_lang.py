@@ -82,3 +82,8 @@ def test_citation_regex_tolerates_spacing() -> None:
 )
 def test_lecture_number_in_text(text: str, expected: int | None) -> None:
     assert lecture_number_in_text(text) == expected
+
+
+def test_a_comma_before_part_keeps_the_part():
+    m = CITATION_RE.search('(v1, Lecture 11, Part 2 — "Foundations 11")')
+    assert m["part"] == "2" and m["title"] == "Foundations 11"

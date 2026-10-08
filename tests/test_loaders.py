@@ -114,3 +114,9 @@ def test_the_shipped_export_is_the_34_lecture_corpus():
     assert {lec.lecture_part for lec in by_tier["v1"] if lec.lecture_number == 11} == {"1", "2"}
     assert all(lec.english_transcription and lec.hebrew_transcription and lec.english_summary for lec in lectures)
     assert not any("transcript" in lec.lecture_title.lower() for lec in by_tier["v1"])
+
+
+def test_subject_tagger_chatter_and_json_brackets_are_dropped():
+    raw = ["Looking at this lecture transcript", "I need to extract the key conceptual subjects discussed.",
+           '["Successful company definition', 'Customer-funded growth"]', "Pricing"]
+    assert L._subjects(raw) == ["Successful company definition", "Customer-funded growth", "Pricing"]

@@ -24,11 +24,8 @@ class Section(BaseModel):
 
     section_index: int
     topic: str = ""
-    context: str = ""
     en_text: str = ""
     he_text: str = ""
-    en_summary: str = ""
-    he_summary: str = ""
 
 
 class Lecture(BaseModel):

@@ -399,7 +399,9 @@
   function scrollToBottom(force) { if (force || nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight; }
 
   var TIERS = { v2: true, v1: true, tedx: true, outsource: true };
-  var SOURCES_SECTION_RE = /\n+[ \t]*#{1,4}[ \t]*(?:Sources|מקורות)[ \t]*:?[ \t]*\n[\s\S]*$/;
+  // only a trailing heading followed by nothing but list items (what the server appends) — a "Sources" heading
+  // followed by prose is part of the answer and stays
+  var SOURCES_SECTION_RE = /\n+[ \t]*#{1,4}[ \t]*(?:Sources|מקורות)[ \t]*:?[ \t]*(?:\n[ \t]*(?:[-*+•][^\n]*)?)+$/;
 
   function sourcesBlock(citations, lang) {
     if (!citations || !citations.length) return null;
@@ -423,14 +425,18 @@
     function label(icon, text_) { btn.innerHTML = icon; btn.appendChild(el('span', { text: text_ })); }
     function done() {
       btn.classList.add('su-done'); label(ICONS.check, s.copied);
-      setTimeout(function () { btn.classList.remove('su-done'); label(ICONS.copy, s.copy); }, 1600);
+      clearTimeout(btn._suReset);  // a second click restarts the "Copied" period instead of cutting it short
+      btn._suReset = setTimeout(function () { btn.classList.remove('su-done'); label(ICONS.copy, s.copy); }, 1600);
     }
-    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done, function () {}); return; }
-    var ta = el('textarea', { readonly: '', 'aria-hidden': 'true' });  // http:// pages have no Clipboard API
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { if (document.execCommand('copy')) done(); } catch (e) { /* copying is a convenience */ }
-    document.body.removeChild(ta);
+    function legacyCopy() {  // http:// pages have no Clipboard API; a denied permission rejects it
+      var ta = el('textarea', { readonly: '', 'aria-hidden': 'true' });
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { if (document.execCommand('copy')) done(); } catch (e) { /* copying is a convenience */ }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done, legacyCopy); return; }
+    legacyCopy();
   }
 
   /** Create the DOM for one message; returns {wrap, bubble}. An answer is a card (text + sources) followed by its

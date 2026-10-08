@@ -578,9 +578,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=None, help=f"output directory (default {DEFAULT_OUT_DIR})")
     p.add_argument("--questions", type=Path, default=QUESTIONS_PATH, help="alternative questions.jsonl")
     p.add_argument(
-        "--filter-lecture",
+        "--no-lecture-filter",
         action="store_true",
-        help="retrieval mode: filter by the lecture number named in the question (mirrors the agent)",
+        help="retrieval mode: do not filter by the lecture number named in the question (the agent does)",
     )
     p.add_argument("--strict-citations", action="store_true", help="full mode: every citation must be expected")
     p.add_argument("-v", "--verbose", action="store_true", help="show retrieval/agent INFO logs")
@@ -591,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         limit=a.limit,
         out_dir=a.out,
         ids=a.ids.split(",") if a.ids else None,
-        filter_lecture=a.filter_lecture,
+        filter_lecture=not a.no_lecture_filter,
         strict_citations=a.strict_citations,
         questions_path=a.questions,
     )

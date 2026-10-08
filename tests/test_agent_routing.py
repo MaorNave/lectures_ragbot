@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from langchain_core.documents import Document
 
 from smartup_rag.agent import nodes as N
@@ -106,3 +107,12 @@ def test_comma_and_unquoted_citation_shapes_are_normalised_and_verified():
 def test_hebrew_decline_is_recognised():
     out = N.verify({"language": "he", "docs": [doc("v2", 5, "A")], "answer": "לא מצאתי את הנושא הזה בהרצאות SmartUp."})
     assert out["status"] == "not_found" and "מקורות" not in out["answer"]
+
+
+@pytest.mark.parametrize(("question", "scope"), [
+    ("מה נאמר בגרסה הישנה על תמחור?", "v1"),
+    ("מה נאמר בגרסה 1?", "v1"),
+    ("מה ההבדל בין הגרסאות בהרצאה 1?", "both"),
+])
+def test_hebrew_version_words_match_with_a_prefix_letter(question, scope):
+    assert N.normalise_version_scope(question, "default", "conceptual") == scope

@@ -51,9 +51,10 @@ log = logging.getLogger(__name__)
 HOMEWORK_TERMS = {"en": " homework assignment exercise task", "he": " שיעורי בית משימה תרגיל להגיש"}
 
 # version-scope normalisation (instructions §4.2, §6 "Version Comparison Questions")
-_V1_RE = re.compile(r"\b(v1|version\s*1|old version|previous version|גרסה\s*1|הגרסה הישנה)\b", re.IGNORECASE)
-_V2_RE = re.compile(r"\b(v2|version\s*2|new version|current version|גרסה\s*2|הגרסה החדשה)\b", re.IGNORECASE)
-_VERSION_WORD_RE = re.compile(r"\b(versions?|גרסה|גרסאות)\b", re.IGNORECASE)
+# the Hebrew words take no leading \b: a prefix letter (בגרסה, הגרסאות) is a word character
+_V1_RE = re.compile(r"\b(?:v1|version\s*1|old version|previous version)\b|גרסה\s*1\b|גרסה\s+הישנה", re.IGNORECASE)
+_V2_RE = re.compile(r"\b(?:v2|version\s*2|new version|current version)\b|גרסה\s*2\b|גרסה\s+החדשה", re.IGNORECASE)
+_VERSION_WORD_RE = re.compile(r"\bversions?\b|גרס(?:ה|אות)\b", re.IGNORECASE)
 _COMPARE_RE = re.compile(
     r"(\bcompare\b|\bcomparison\b|\bversus\b|\bvs\.?\b|\bdiffer\w*\b|\bdifference\b|what changed|changed between"
     r"|השווה|השוו|להשוות|ההבדל|הבדלים|מה השתנה)",
@@ -289,17 +290,31 @@ def question_key(question: str) -> str:
     return _NON_WORD_RE.sub(" ", question.casefold()).strip()
 
 
+_FOLLOW_UP_MAX_WORDS = 3
+
+
+def _context_key(state: AgentState) -> str:
+    """The question asked before this one — what a short follow-up like "tell me more" or "why?" refers to."""
+    prev = next((m for m in reversed(_history(state)) if isinstance(m, HumanMessage)), None)
+    return question_key(str(prev.content)) if prev is not None else ""
+
+
 def _previous_answer(state: AgentState) -> dict[str, Any] | None:
     key = question_key(state.get("question") or "")
     if not key:
         return None
-    return next((e for e in reversed(state.get("answer_log") or []) if e.get("key") == key), None)
+    # a short question is only the same question when it follows the same one ("tell me more" after PMF ≠ after pricing)
+    context = _context_key(state) if len(key.split()) <= _FOLLOW_UP_MAX_WORDS else None
+    return next((e for e in reversed(state.get("answer_log") or [])
+                 if e.get("key") == key and (context is None or e.get("context") == context)), None)
 
 
 def _replayable(state: AgentState, status: str) -> bool:
     """Only a finished answer to a real question is worth giving again. Not an error or a greeting, not an answer cut
     off when the reader left, and not one from a turn whose search failed — asking again is how a reader retries."""
     if status in ("error", "chit_chat") or state.get("stopped_early"):
+        return False
+    if (state.get("classification") or {}).get("error"):  # refused only because the classifier was down
         return False
     return not any(str(n).startswith("retrieval_error:") for n in state.get("notes") or [])
 
@@ -311,6 +326,7 @@ def _logged(state: AgentState, answer: str, status: str, citations: list[dict[st
         c = state.get("classification") or {}
         log_.append({
             "key": question_key(state.get("question") or ""),
+            "context": _context_key(state),
             "question": state.get("question"),
             "answer": answer,
             "status": status,
@@ -614,7 +630,8 @@ def _fallback(state: AgentState, config: RunnableConfig) -> dict:
         with trace.span(f"fallback {tier}") as sp:
             best = _best_score(d) or 0.0
             later_strong = next((t for t in tiers[i + 1:] if (_best_score(found[t]) or 0.0) >= s.grade_strong_threshold), None)
-            if c.get("intent") == "lecture_summary" and d:
+            if c.get("intent") == "lecture_summary" and not (lecture_named_and_in_v2 and tier == "v1") \
+                    and any(x.metadata.get("section_topic") == SUMMARY_TOPIC for x in d):
                 g = {"verdict": "sufficient", "reason": f"{tier} lecture found", "method": "skip"}
             elif later_strong and s.grade_weak_threshold <= best < _skip_cutoff(tier):
                 g = {"verdict": "insufficient", "method": "skip-weak",
@@ -651,9 +668,8 @@ def route_after_fallback(state: AgentState) -> str:
 
 def generate(state: AgentState, config: RunnableConfig) -> dict:
     s = get_settings()
-    msgs = P.answer_messages(
-        state["question"], state["language"], state["docs"], _history(state), state.get("notes", []), s.max_history_turns
-    )
+    guidance = [n for n in state.get("notes", []) if not str(n).startswith("retrieval_error:")]
+    msgs = P.answer_messages(state["question"], state["language"], state["docs"], _history(state), guidance, s.max_history_turns)
     stop = ((config or {}).get("configurable") or {}).get("stop_event")  # set by the API when the client leaves
     parts: list[str] = []
     meta: dict[str, Any] = {}
@@ -728,7 +744,7 @@ def _strip_model_sources(answer: str) -> str:
     for m in _SOURCES_HEADING_RE.finditer(answer):
         tail = answer[m.end():]
         lines = [ln for ln in tail.splitlines() if ln.strip()]
-        if all(_SOURCE_ITEM_RE.match(ln) or CITATION_RE.search(ln) for ln in lines):
+        if all(_SOURCE_ITEM_RE.match(ln) or CITATION_RE.search(ln) or OUTSIDE_CITATION_RE.search(ln) for ln in lines):
             return answer[: m.start()].rstrip()
     return answer.rstrip()
 

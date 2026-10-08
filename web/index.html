@@ -132,6 +132,7 @@
   .chat { flex: 1; min-height: 0; }
   .chat .su-widget { height: 100%; }
   .scrim { position: fixed; inset: 0; background: rgba(8, 10, 14, .5); z-index: 15; }
+  @media (min-width: 921px) { .scrim { display: none; } }  /* a drawer left open on a narrow window must not cover the page */
 
   @media (max-width: 920px) {
     .app { grid-template-columns: minmax(0, 1fr); }
@@ -303,7 +304,7 @@
           else ask('Summarize the lecture "' + l.lecture_title + '"');
         });
         details.appendChild(b);
-        rows.push({ el: b, group: details, count: count, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
+        rows.push({ el: b, group: details, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
         total++;
       });
       box.appendChild(details);
