@@ -7,8 +7,10 @@
  *           data-title="SmartUp Assistant"
  *           data-lang="auto"                            (auto | en | he — UI language / direction)
  *           data-position="right"                       (right | left)
- *           data-primary="#1f4ed8"                      (optional theme colour; or set CSS vars on .su-widget)
+ *           data-primary="#2b4acb"                      (optional theme colour; or set CSS vars on .su-widget)
+ *           data-theme="light"                          (light | dark | auto — auto follows the visitor's OS)
  *           data-welcome="..."                          (optional custom welcome message)
+ *           data-suggestions='["…", "…"]'              (optional: questions offered before the first message)
  *           data-timing="off"                           (optional: hide the answer stopwatches)
  *           data-no-css                                 (optional: do not auto-load widget.css)
  *           defer></script>
@@ -16,7 +18,8 @@
  * Talks to:  POST {apiBase}/chat/stream  (Server-Sent Events: token* → final | error)
  *            POST {apiBase}/chat         (fallback when streaming is unavailable)
  *
- * Public API: window.SmartUpWidget.{open, close, toggle, send(text), reset, setTheme({'--su-primary': '#...'})}
+ * Public API: window.SmartUpWidget.{open, close, toggle, send(text), reset, setSuggestions([...]),
+ *             setTheme({'--su-primary': '#...'})}
  */
 (function () {
   'use strict';
@@ -35,6 +38,11 @@
   var ds = (script && script.dataset) || {};
   var scriptUrl = script && script.src ? new URL(script.src, location.href) : null;
 
+  function parseList(raw) {
+    if (!raw) return [];
+    try { var v = JSON.parse(raw); return Array.isArray(v) ? v.map(String).filter(Boolean) : []; } catch (e) { return []; }
+  }
+
   var config = {
     apiBase: (ds.apiBase || (scriptUrl ? scriptUrl.origin : location.origin)).replace(/\/+$/, ''),
     title: ds.title || 'SmartUp Assistant',
@@ -48,6 +56,8 @@
     mode: ds.mode === 'inline' ? 'inline' : 'float',   // inline = full-page chat box rendered into data-target
     target: ds.target || null,
     timing: ds.timing !== 'off',                       // stopwatches under each answer
+    theme: ds.theme === 'dark' || ds.theme === 'auto' ? ds.theme : 'light',
+    suggestions: parseList(ds.suggestions),            // questions offered in the empty conversation
     maxChars: 2000
   };
 
@@ -56,7 +66,11 @@
   // ---------------------------------------------------------------------------------------------
   var STR = {
     en: {
-      subtitle: 'Answers from the SmartUp lectures (v2 first, then TEDx, v1, other lectures)',
+      subtitle: 'Answers grounded in Yonatan Stern’s lectures',
+      heroTitle: 'Ask the SmartUp lectures',
+      heroText: 'Every answer comes from Yonatan Stern’s lectures — the v2 course first, then his TEDx talk, the v1 course and other lectures — and cites the lecture it is drawn from.',
+      heroLabel: 'Try asking',
+      copy: 'Copy', copied: 'Copied',
       placeholder: 'Ask about the lectures…',
       send: 'Send', open: 'Open chat', close: 'Close chat', newChat: 'New conversation',
       thinking: 'Thinking…', searching: 'Searching the lectures…',
@@ -68,6 +82,7 @@
       fallbackNote: 'v1 material used',
       fallbackNotes: { tedx: 'From Yonatan\u2019s TEDx talk', v1: 'v1 material used', outsource: 'From lectures outside the course' },
       footer: 'Answers come only from the lecture transcripts.',
+      footerInline: 'Answers come only from the lecture transcripts · Enter to send, Shift+Enter for a new line',
       you: 'You', bot: 'Assistant', chars: 'characters',
       firstWords: 'First words', fullAnswer: 'Full answer', secs: 's',
       firstWordsHint: 'Time from sending the question until the answer started to appear',
@@ -75,7 +90,11 @@
       trace: 'trace ↗', traceHint: 'Open this answer on the pipeline dashboard: query, passages, grading, generation'
     },
     he: {
-      subtitle: 'תשובות מתוך הרצאות SmartUp (v2 קודם, אחר כך TEDx, v1 והרצאות נוספות)',
+      subtitle: 'תשובות שמבוססות על ההרצאות של יונתן שטרן',
+      heroTitle: 'שאלו את הרצאות SmartUp',
+      heroText: 'כל תשובה מבוססת על ההרצאות של יונתן שטרן — קודם גרסה v2 של הקורס, אחר כך הרצאת ה-TEDx, גרסה v1 והרצאות נוספות — ומציינת את ההרצאה שממנה היא לקוחה.',
+      heroLabel: 'אפשר לשאול למשל',
+      copy: 'העתקה', copied: 'הועתק',
       placeholder: 'שאל/י על ההרצאות…',
       send: 'שליחה', open: 'פתיחת צ׳אט', close: 'סגירת צ׳אט', newChat: 'שיחה חדשה',
       thinking: 'חושב…', searching: 'מחפש בהרצאות…',
@@ -87,6 +106,7 @@
       fallbackNote: 'נעשה שימוש בחומר v1',
       fallbackNotes: { tedx: 'מתוך הרצאת ה-TEDx של יונתן', v1: 'נעשה שימוש בחומר v1', outsource: 'מתוך הרצאות מחוץ לקורס' },
       footer: 'התשובות מבוססות על תמלילי ההרצאות בלבד.',
+      footerInline: 'התשובות מבוססות על תמלילי ההרצאות בלבד · Enter לשליחה, Shift+Enter לשורה חדשה',
       you: 'את/ה', bot: 'העוזר', chars: 'תווים',
       firstWords: 'מילים ראשונות', fullAnswer: 'תשובה מלאה', secs: 'שנ׳',
       firstWordsHint: 'הזמן משליחת השאלה ועד שהתשובה התחילה להופיע',
@@ -124,12 +144,12 @@
     s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/__([^_\n]+?)__/g, '<strong>$1</strong>');
     s = s.replace(/(^|[\s(א-ת])\*([^*\n]+?)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
-    s = s.replace(/\((v[12]),\s*Lecture\s+\d+(?:\s+Part\s+\d+)?\s*[—–-]+\s*[^()]*\)/gi, function (m) {
-      return '<span class="su-cite">' + m + '</span>';
+    s = s.replace(/\((v[12]),\s*Lecture\s+\d+(?:\s+Part\s+\d+)?\s*[—–-]+\s*[^()]*\)/gi, function (m, version) {
+      return '<span class="su-cite su-cite-' + version.toLowerCase() + '" dir="ltr">' + m + '</span>';
     });
     // outside sources: (TEDx — "…"), (Talk — "…"), (Digital Innovation IDC, Lecture 3 — "…"); quotes are escaped here
-    s = s.replace(/\((TEDx|Talk|Digital Innovation IDC)(?:,\s*Lecture\s+\d+)?\s*[—–-]+\s*(?:&quot;|“)[^()]*\)/gi, function (m) {
-      return '<span class="su-cite">' + m + '</span>';
+    s = s.replace(/\((TEDx|Talk|Digital Innovation IDC)(?:,\s*Lecture\s+\d+)?\s*[—–-]+\s*(?:&quot;|“)[^()]*\)/gi, function (m, label) {
+      return '<span class="su-cite su-cite-' + (/tedx/i.test(label) ? 'tedx' : 'outsource') + '" dir="ltr">' + m + '</span>';
     });
     return s;
   }
@@ -197,7 +217,10 @@
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>',
     send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9" stroke-linecap="round"/></svg>',
+    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    ask: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" stroke-linejoin="round"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" stroke-linejoin="round"/></svg>'
   };
 
   // ---------------------------------------------------------------------------------------------
@@ -302,7 +325,7 @@
     }
     var inline = config.mode === 'inline';
     root = el('div', {
-      class: 'su-widget' + (inline ? ' su-inline su-open' : ''),
+      class: 'su-widget su-theme-' + config.theme + (inline ? ' su-inline su-open' : ''),
       'data-position': config.position, 'data-mode': config.mode,
       dir: state.uiLang === 'he' ? 'rtl' : 'ltr'
     });
@@ -321,8 +344,8 @@
     messagesEl = el('div', { class: 'su-messages', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
     inputEl = el('textarea', { class: 'su-input', rows: '1', placeholder: t('placeholder'), maxlength: String(config.maxChars), 'aria-label': t('placeholder') });
     sendBtn = el('button', { class: 'su-send', type: 'button', title: t('send'), 'aria-label': t('send'), html: ICONS.send, onclick: function () { send(); } });
-    var composer = el('div', { class: 'su-composer' }, [inputEl, sendBtn]);
-    footerEl = el('div', { class: 'su-footer', text: t('footer') });
+    var composer = el('div', { class: 'su-composer' }, [el('div', { class: 'su-composer-box' }, [inputEl, sendBtn])]);
+    footerEl = el('div', { class: 'su-footer', text: t(inline ? 'footerInline' : 'footer') });
     panel = el('div', { class: 'su-panel', role: 'dialog', 'aria-modal': 'false', 'aria-label': config.title }, [header, messagesEl, composer, footerEl]);
 
     // launcher
@@ -365,7 +388,7 @@
     newBtn.title = t('newChat'); newBtn.setAttribute('aria-label', t('newChat'));
     closeBtn.title = t('close'); closeBtn.setAttribute('aria-label', t('close'));
     launcher.setAttribute('aria-label', state.open ? t('close') : t('open'));
-    footerEl.textContent = t('footer');
+    footerEl.textContent = t(config.mode === 'inline' ? 'footerInline' : 'footer');
     if (!inputEl.value) inputEl.setAttribute('dir', state.uiLang === 'he' ? 'rtl' : 'ltr');
   }
 
@@ -375,63 +398,125 @@
   function nearBottom() { return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80; }
   function scrollToBottom(force) { if (force || nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight; }
 
+  var TIERS = { v2: true, v1: true, tedx: true, outsource: true };
+  var SOURCES_SECTION_RE = /\n+[ \t]*#{1,4}[ \t]*(?:Sources|מקורות)[ \t]*:?[ \t]*\n[\s\S]*$/;
+
   function sourcesBlock(citations, lang) {
     if (!citations || !citations.length) return null;
-    var label = (STR[lang] || STR.en)[citations.length > 1 ? 'sources' : 'source'] + ' (' + citations.length + ')';
+    var label = (STR[lang] || STR.en)[citations.length > 1 ? 'sources' : 'source'] + ' · ' + citations.length;
     var items = citations.map(function (c) {
       var head = c.display === undefined || c.display === null ? ('Lecture ' + c.lecture_number) : c.display;  // '' = single talk
       var title = c.lecture_title ? '“' + c.lecture_title + '”' : '';
+      var tier = TIERS[c.tier] ? c.tier : (c.course_version === 'v1' ? 'v1' : 'v2');  // saved before tiers existed
       return el('li', null, [
-        el('span', { class: 'su-ver', text: c.source || c.course_version || '' }),
+        el('span', { class: 'su-ver su-tier-' + tier, text: c.source || c.course_version || '' }),
         el('span', { text: head && title ? head + ' — ' + title : (head || title) })
       ]);
     });
     var details = el('details', { class: 'su-sources', dir: 'ltr' }, [el('summary', { text: label }), el('ul', null, items)]);
+    if (citations.length <= 4) details.open = true;
     return details;
   }
 
-  /** Create the DOM for one message; returns {wrap, bubble}. */
+  function copyText(text, btn, lang) {
+    var s = STR[lang] || STR.en;
+    function label(icon, text_) { btn.innerHTML = icon; btn.appendChild(el('span', { text: text_ })); }
+    function done() {
+      btn.classList.add('su-done'); label(ICONS.check, s.copied);
+      setTimeout(function () { btn.classList.remove('su-done'); label(ICONS.copy, s.copy); }, 1600);
+    }
+    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done, function () {}); return; }
+    var ta = el('textarea', { readonly: '', 'aria-hidden': 'true' });  // http:// pages have no Clipboard API
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { if (document.execCommand('copy')) done(); } catch (e) { /* copying is a convenience */ }
+    document.body.removeChild(ta);
+  }
+
+  /** Create the DOM for one message; returns {wrap, bubble}. An answer is a card (text + sources) followed by its
+   *  notes (the source that answered) and actions (stopwatches, copy, trace). */
   function messageNode(msg) {
     var lang = isHebrew(msg.text) ? 'he' : (msg.role === 'user' ? (state.uiLang) : (msg.language || state.uiLang));
     var wrap = el('div', { class: 'su-msg su-' + (msg.role === 'user' ? 'user' : 'bot') + (msg.status ? ' su-status-' + msg.status : '') });
     var bubble = el('div', { class: 'su-bubble', dir: dirOf(msg.text || '') });
-    if (msg.role === 'user') bubble.textContent = msg.text;
-    else bubble.innerHTML = renderMarkdown(msg.text);
-    wrap.appendChild(bubble);
-    if (msg.role !== 'user') {
-      var src = sourcesBlock(msg.citations, lang);
-      if (src) wrap.appendChild(src);
-      var metaBits = [];
-      // the source that answered: TEDx / v1 / outside lectures (older saved messages only know "fallback used")
-      var strs = STR[lang] || STR.en;
-      if (msg.fallbackTier && strs.fallbackNotes[msg.fallbackTier]) metaBits.push(strs.fallbackNotes[msg.fallbackTier]);
-      else if (msg.usedFallback && msg.fallbackTier === undefined) metaBits.push(strs.fallbackNote);  // saved before tiers
-      if (msg.note) metaBits.push(msg.note);
-      if (metaBits.length) wrap.appendChild(el('div', { class: 'su-meta' }, metaBits.map(function (b) { return el('span', { text: b }); })));
-      if (msg.timing && config.timing) wrap.appendChild(timingChips(lang, msg.timing).node);
-      if (msg.traceId) {  // only present when the API shares traces with this browser (DEBUG_DASHBOARD)
-        var s = STR[lang] || STR.en;
-        var link = el('a', { class: 'su-trace-link', href: config.apiBase + '/dashboard#' + encodeURIComponent(msg.traceId),
-          target: '_blank', rel: 'noopener', title: s.traceHint, text: s.trace });
-        var row = wrap.querySelector('.su-timing');
-        if (row) row.appendChild(link); else wrap.appendChild(el('div', { class: 'su-timing' }, [link]));
-      }
+    if (msg.role === 'user') {
+      bubble.textContent = msg.text;
+      wrap.appendChild(bubble);
+      return { wrap: wrap, bubble: bubble };
     }
+    // the server appends a "## Sources" list to the answer text (for API and CLI readers); the card shows the same
+    // citations as its own sources block, so the text version is left out here
+    var hasSources = !!(msg.citations && msg.citations.length);
+    bubble.innerHTML = renderMarkdown(hasSources ? msg.text.replace(SOURCES_SECTION_RE, '') : msg.text);
+    var card = el('div', { class: 'su-card' }, [bubble]);
+    var src = sourcesBlock(msg.citations, lang);
+    if (src) card.appendChild(src);
+    wrap.appendChild(card);
+
+    var strs = STR[lang] || STR.en;
+    var metaBits = [];
+    // the source that answered: TEDx / v1 / outside lectures (older saved messages only know "fallback used")
+    if (msg.fallbackTier && strs.fallbackNotes[msg.fallbackTier]) metaBits.push(strs.fallbackNotes[msg.fallbackTier]);
+    else if (msg.usedFallback && msg.fallbackTier === undefined) metaBits.push(strs.fallbackNote);  // saved before tiers
+    if (msg.note) metaBits.push(msg.note);
+    if (metaBits.length) wrap.appendChild(el('div', { class: 'su-meta' }, metaBits.map(function (b) { return el('span', { text: b }); })));
+
+    var actions = [];
+    if (msg.timing && config.timing) actions.push(timingChips(lang, msg.timing).node);
+    if (msg.text && msg.status === 'answered') {
+      var copyBtn = el('button', { class: 'su-copy', type: 'button', title: strs.copy, html: ICONS.copy });
+      copyBtn.appendChild(el('span', { text: strs.copy }));
+      copyBtn.addEventListener('click', function () { copyText(msg.text, copyBtn, lang); });
+      actions.push(copyBtn);
+    }
+    if (msg.traceId) {  // only present when the API shares traces with this browser (DEBUG_DASHBOARD)
+      actions.push(el('a', { class: 'su-trace-link', href: config.apiBase + '/dashboard#' + encodeURIComponent(msg.traceId),
+        target: '_blank', rel: 'noopener', title: strs.traceHint, text: strs.trace }));
+    }
+    if (actions.length) wrap.appendChild(el('div', { class: 'su-actions' }, actions));
     return { wrap: wrap, bubble: bubble };
+  }
+
+  function suggestionButton(question) {
+    var b = el('button', { class: 'su-suggestion', type: 'button', dir: dirOf(question), html: ICONS.ask });
+    b.appendChild(el('span', { text: question }));
+    b.addEventListener('click', function () { send(question); });
+    return b;
+  }
+
+  /** Before the first question: a welcome screen with suggested questions (inline), or a welcome message (bubble). */
+  function emptyState() {
+    if (config.mode === 'inline') {
+      var hero = el('div', { class: 'su-hero su-empty' }, [
+        el('div', { class: 'su-hero-mark', text: 'SU', 'aria-hidden': 'true' }),
+        el('h2', { class: 'su-hero-title', text: t('heroTitle') }),
+        el('p', { class: 'su-hero-text', text: config.welcome || t('heroText') })
+      ]);
+      if (config.suggestions.length) {
+        hero.appendChild(el('div', { class: 'su-hero-label', text: t('heroLabel') }));
+        hero.appendChild(el('div', { class: 'su-suggest-grid' }, config.suggestions.map(suggestionButton)));
+      }
+      return hero;
+    }
+    var node = messageNode({ role: 'bot', text: config.welcome || t('welcome'), status: 'welcome' });
+    node.wrap.classList.add('su-empty');
+    if (config.suggestions.length) {
+      node.wrap.appendChild(el('div', { class: 'su-suggest' }, config.suggestions.slice(0, 4).map(suggestionButton)));
+    }
+    return node.wrap;
   }
 
   function renderAll() {
     messagesEl.innerHTML = '';
     applyLang();
-    if (!state.messages.length) {
-      messagesEl.appendChild(messageNode({ role: 'bot', text: config.welcome || t('welcome'), status: 'welcome' }).wrap);
-    } else {
-      state.messages.forEach(function (m) { messagesEl.appendChild(messageNode(m).wrap); });
-    }
+    if (!state.messages.length) messagesEl.appendChild(emptyState());
+    else state.messages.forEach(function (m) { messagesEl.appendChild(messageNode(m).wrap); });
     scrollToBottom(true);
   }
 
   function pushMessage(msg) {
+    var empty = messagesEl.querySelector('.su-empty');  // the welcome screen gives way to the conversation
+    if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
     state.messages.push(msg);
     store.save(state);
     var node = messageNode(msg);
@@ -442,7 +527,9 @@
 
   function typingNode(label) {
     var wrap = el('div', { class: 'su-msg su-bot su-typing-wrap' }, [
-      el('div', { class: 'su-bubble su-typing', 'aria-label': label }, [el('i'), el('i'), el('i'), el('span', { class: 'su-typing-label', text: label })])
+      el('div', { class: 'su-card' }, [
+        el('div', { class: 'su-bubble su-typing', 'aria-label': label }, [el('i'), el('i'), el('i'), el('span', { class: 'su-typing-label', text: label })])
+      ])
     ]);
     messagesEl.appendChild(wrap);
     scrollToBottom(true);
@@ -684,6 +771,10 @@
   function setTheme(vars) {
     Object.keys(vars || {}).forEach(function (k) { root.style.setProperty(k, vars[k]); });
   }
+  function setSuggestions(list) {
+    config.suggestions = (Array.isArray(list) ? list : []).map(String).filter(Boolean);
+    if (root && !state.messages.length) renderAll();  // only the empty conversation shows them
+  }
 
   // ---------------------------------------------------------------------------------------------
   // mount
@@ -695,6 +786,7 @@
   window.SmartUpWidget = {
     _mounted: true, config: config,
     open: function () { open(); }, close: close, toggle: toggle, send: send, reset: reset, setTheme: setTheme,
+    setSuggestions: setSuggestions,
     renderMarkdown: renderMarkdown, isHebrew: isHebrew
   };
   mount();

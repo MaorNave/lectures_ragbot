@@ -1,0 +1,8 @@
+# Development tools (tests, lint) on top of the pinned runtime dependencies.
+#   python -m pip install -r requirements-dev.txt && python -m pip install --no-deps -e .
+-r requirements.txt
+
+iniconfig==2.3.0
+pluggy==1.6.0
+pytest==9.1.1
+ruff==0.16.8

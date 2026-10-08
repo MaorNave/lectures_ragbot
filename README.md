@@ -79,7 +79,8 @@ source of the project — with one command (`smartup ingest`, ~4 minutes).
 ```bash
 git clone https://github.com/OWNER/lectures_ragbot.git && cd lectures_ragbot
 python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"            # or: make install
+.venv/bin/pip install -r requirements-dev.txt && .venv/bin/pip install --no-deps -e .   # the pinned, tested versions
+# or: .venv/bin/pip install -e ".[dev]"      # the newest versions within pyproject.toml's ranges (make install)
 cp .env.example .env                          # optional: every value in it is already the default
 
 .venv/bin/smartup models --pull               # qwen3.5:9b + bge-m3 into Ollama, the cross-encoder from Hugging Face
@@ -91,10 +92,14 @@ cp .env.example .env                          # optional: every value in it is a
 On Linux without an NVIDIA GPU, install the CPU build of PyTorch first (`pip install torch --index-url
 https://download.pytorch.org/whl/cpu`); the default PyPI wheel bundles several GB of CUDA libraries.
 
-Open **<http://localhost:8000/>** and use the chat box: type a question in Hebrew or English, watch the answer
-**stream in token by token**, and read the **Sources** block under it. The left column lists every lecture, grouped by
-source in search order (v2, TEDx, v1, outside lectures) — clicking one asks for its summary. The floating-bubble
-version of the same widget is demonstrated at <http://localhost:8000/widget/embed-demo.html>.
+Open **<http://localhost:8000/>**. An empty conversation shows a welcome screen with suggested questions; type a
+question in Hebrew or English and watch the answer **stream in token by token** into an answer card — inline citations
+coloured by source, the **Sources** under the answer, which source answered when the fallback chain was used, two
+stopwatches, and a copy button. The sidebar is the lecture library: the four sources in search order, and every lecture
+grouped by source with its main topic — filter it by topic or title, click a lecture for its summary. The page follows
+the system's light or dark mode, Hebrew conversations switch to right-to-left, and on a phone the library becomes a
+drawer. The floating-bubble version of the same widget is demonstrated at
+<http://localhost:8000/widget/embed-demo.html>.
 
 ### The pipeline dashboard
 
@@ -124,11 +129,13 @@ CORS_ORIGINS=https://www.smartupacademy.org,https://smartupacademy.org
 `CORS_ORIGINS=*` (the default) is fine for local development only.
 
 Optional attributes on the same tag: `data-title`, `data-lang` (`auto` | `en` | `he`), `data-position`
-(`right` | `left`), `data-primary="#1f4ed8"`, `data-welcome="..."`, `data-storage-key` (namespaces the saved
-conversation in `localStorage`), `data-timing="off"` (hides the two stopwatches under each answer), `data-css`,
-`data-no-css`, and `data-mode="inline" data-target="#chat"` to render a full chat box into an element instead of a
-bubble (that is exactly what `web/index.html` does). The widget also exposes
-`window.SmartUpWidget.{open, close, toggle, send, reset, setTheme}`.
+(`right` | `left`), `data-theme` (`light` | `dark` | `auto` — `auto` follows the visitor's OS), `data-primary="#2b4acb"`,
+`data-welcome="..."`, `data-suggestions='["…", "…"]'` (questions offered before the first message), `data-storage-key`
+(namespaces the saved conversation in `sessionStorage`), `data-timing="off"` (hides the two stopwatches under each
+answer), `data-css`, `data-no-css`, and `data-mode="inline" data-target="#chat"` to render a full chat box into an
+element instead of a bubble (that is exactly what `web/index.html` does). The widget also exposes
+`window.SmartUpWidget.{open, close, toggle, send, reset, setSuggestions, setTheme}`; every colour is a CSS variable
+on `.su-widget` (`--su-primary`, `--su-bg`, `--su-paper`, `--su-radius`, …).
 
 ### The CLI is for operations
 
@@ -378,15 +385,18 @@ changed are re-embedded — and restart the API. A missing folder is an error ra
 
 | Path | What it is |
 |---|---|
-| `web/index.html` | The full-page chat UI served at `/`: health pill, example questions, the lecture catalogue (click for a summary), and the widget rendered inline. |
-| `web/widget.js`, `web/widget.css` | The embeddable chat widget — vanilla JS, no dependencies, no build step. Streams `/chat/stream` (falling back to `/chat`), renders a safe subset of Markdown, highlights citations, shows the Sources list and the source that answered, runs two stopwatches per answer, keeps the conversation in `localStorage`, switches to RTL for Hebrew, and handles 429 politely. Themed through CSS variables. |
+| `web/index.html` | The full-page chat UI served at `/`: the lecture library in a sidebar (the source order, every lecture grouped by source with its main topic, a filter; click for a summary), a status pill and a "New chat" button, and the widget rendered inline. Light and dark mode; a drawer on narrow screens. |
+| `web/widget.js`, `web/widget.css` | The embeddable chat widget — vanilla JS, no dependencies, no build step. Streams `/chat/stream` (falling back to `/chat`), renders a safe subset of Markdown into answer cards, colours citations by source, shows the Sources and the source that answered, runs two stopwatches per answer, offers a copy button, shows a welcome screen with suggested questions, keeps the conversation in `sessionStorage`, switches to RTL for Hebrew, and handles 429 politely. Themed through CSS variables, with `light`, `dark` and `auto` themes. |
+| `web/fonts/` | Heebo and Frank Ruhl Libre (Hebrew + Latin variable fonts, SIL OFL 1.1), self-hosted so the UI makes no third-party requests. |
 | `web/embed-demo.html` | A stand-in website page showing the floating bubble. |
 | `web/dashboard.html` | The pipeline dashboard served at `/dashboard`. All trace text is inserted as text, never as HTML. |
 | `tests/` | The test suite (§10). |
 | `docs/ARCHITECTURE.md` | Design notes: requirements, decisions and their reasons, the move from Elasticsearch to the local index, and how the reranker thresholds were calibrated. |
 | `instructions.md` | The behavioural specification for the assistant, **loaded verbatim as the system prompt** — editing it changes the chatbot's behaviour without touching Python. |
 | `.env.example` | The documented configuration template (every value is also the default). |
-| `Makefile`, `pyproject.toml` | Thin wrappers over the CLI; package metadata, dependencies, the `smartup` console script, Ruff and pytest configuration. |
+| `Makefile`, `pyproject.toml` | Thin wrappers over the CLI; package metadata, dependency ranges, the `smartup` console script, Ruff and pytest configuration. |
+| `requirements.txt`, `requirements-dev.txt` | The exact versions the tests, the evaluation and the reranker calibration ran with (Python 3.13, macOS arm64); the dev file adds pytest and Ruff. |
+| `LICENSE` | The MIT License. |
 
 ---
 
@@ -719,3 +729,11 @@ RUN_INTEGRATION=1 .venv/bin/python -m pytest -q tests/test_integration_local.py
   needs a bigger machine, several Ollama hosts behind a queue, or a hosted model.
 - **No authentication** on the API, and the rate limit is in-process only — put a proxy in front of it before a public
   launch.
+
+---
+
+## License
+
+The code is released under the [MIT License](LICENSE). The bundled fonts are under the SIL Open Font License 1.1
+(`web/fonts/`). The lecture documents in `data/raw/drive_09_2026` are SmartUp Academy course material by Yonatan Stern,
+included as this project's data; check with SmartUp Academy before reusing them elsewhere.

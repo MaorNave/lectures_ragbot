@@ -3,6 +3,9 @@ name = "smartup-rag"
 version = "0.2.0"
 description = "Local RAG chatbot for SmartUp Academy lectures (Ollama + Chroma + SQLite FTS5 + a local cross-encoder, LangChain/LangGraph)"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Maor Nave", email = "maornanibar@gmail.com" }]
 requires-python = ">=3.11"
 dependencies = [
   "langchain-core>=1.6",
@@ -26,7 +29,7 @@ dev = ["pytest>=8", "ruff"]
 smartup = "smartup_rag.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # SPDX `license` / `license-files` (PEP 639)
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
