@@ -1,6 +1,7 @@
 /* SmartUp Assistant widget — themed through CSS variables.
- * Override on your site:  .su-widget { --su-primary: #0b6e4f; --su-radius: 12px; }
+ * Override on your site:  .su-widget { --su-brand: #0b6e4f; --su-radius: 12px; }
  * or on the <script> tag:  data-primary="#0b6e4f"  data-theme="light | dark | auto".
+ * --su-brand colours both themes: the dark theme derives its lighter link colour from it.
  */
 
 /* ---- fonts: self-hosted variable fonts, SIL OFL 1.1 (see fonts/README.md) ---------------------- */
@@ -29,7 +30,9 @@
 
 /* ---- theme ----------------------------------------------------------------------------------------- */
 .su-widget {
-  --su-primary: #2b4acb;            /* links, citations, focus, accents */
+  --su-brand: #2b4acb;              /* the brand colour (data-primary); the blues below derive from it */
+  --su-brand-deep: #182a8c;         /* the dark end of the brand gradients */
+  --su-primary: var(--su-brand);    /* links, citations, focus, accents */
   --su-primary-hover: #213ba8;
   --su-primary-contrast: #ffffff;
   --su-primary-soft: rgba(43, 74, 203, .10);
@@ -77,10 +80,6 @@
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
 }
-@supports (color: color-mix(in srgb, red, blue)) {
-  .su-widget { --su-primary-soft: color-mix(in srgb, var(--su-primary) 11%, transparent); }
-}
-
 .su-widget.su-theme-dark {
   --su-primary: #8fa3ff;
   --su-primary-hover: #a8b8ff;
@@ -108,34 +107,15 @@
   --su-shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -16px rgba(0, 0, 0, .6);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  .su-widget.su-theme-auto {
-    --su-primary: #8fa3ff;
-    --su-primary-hover: #a8b8ff;
-    --su-primary-contrast: #0b0e17;
-    --su-primary-soft: rgba(143, 163, 255, .14);
-    --su-bg: #181b22;
-    --su-paper: #0f1115;
-    --su-fg: #ebe9e4;
-    --su-muted: #9c998f;
-    --su-border: #272b35;
-    --su-border-strong: #343947;
-    --su-bubble-user: #3a52d4;
-    --su-bubble-user-fg: #ffffff;
-    --su-tier-tedx: #ff7083;
-    --su-tier-v1: #a3abb8;
-    --su-tier-outsource: #3fc8b6;
-    --su-ver-fg: #0b0e17;
-    --su-danger: #ff8a92;
-    --su-danger-bg: #2b1618;
-    --su-danger-border: #4d2328;
-    --su-warn-bg: #2a2214;
-    --su-warn-fg: #f2c27b;
-    --su-warn-border: #4a3a1c;
-    --su-shadow: 0 28px 70px -18px rgba(0, 0, 0, .7), 0 6px 18px -6px rgba(0, 0, 0, .5);
-    --su-shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -16px rgba(0, 0, 0, .6);
-    color-scheme: dark;
-  }
+/* with color-mix every blue follows --su-brand in both themes; the hex values above are the fallback */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .su-widget { --su-primary-hover: color-mix(in srgb, var(--su-primary) 82%, black);
+               --su-primary-soft: color-mix(in srgb, var(--su-primary) 11%, transparent);
+               --su-brand-deep: color-mix(in srgb, var(--su-brand) 65%, black); }
+  .su-widget.su-theme-dark { --su-primary: color-mix(in srgb, var(--su-brand) 50%, white);
+                             --su-primary-hover: color-mix(in srgb, var(--su-brand) 35%, white);
+                             --su-primary-soft: color-mix(in srgb, var(--su-primary) 14%, transparent);
+                             --su-bubble-user: color-mix(in srgb, var(--su-brand) 90%, white); }
 }
 
 .su-widget *,
@@ -150,7 +130,7 @@
 .su-launcher {
   display: flex; align-items: center; justify-content: center;
   width: 60px; height: 60px; border-radius: 20px; border: 0;
-  background: linear-gradient(140deg, var(--su-bubble-user), #182a8c);
+  background: linear-gradient(140deg, var(--su-bubble-user), var(--su-brand-deep));
   color: var(--su-bubble-user-fg);
   box-shadow: var(--su-shadow); cursor: pointer;
   transition: transform .18s ease, box-shadow .18s ease;
@@ -185,7 +165,7 @@
 
 .su-header {
   display: flex; align-items: center; gap: 12px; padding: 14px 12px 14px 16px;
-  background: linear-gradient(135deg, var(--su-bubble-user), #182a8c);
+  background: linear-gradient(135deg, var(--su-bubble-user), var(--su-brand-deep));
   color: var(--su-bubble-user-fg);
 }
 .su-widget[dir="rtl"] .su-header { padding: 14px 16px 14px 12px; }
@@ -347,7 +327,7 @@
 }
 .su-hero-mark {
   width: 58px; height: 58px; border-radius: 19px; display: grid; place-items: center;
-  background: linear-gradient(140deg, var(--su-bubble-user), #182a8c); color: #fff;
+  background: linear-gradient(140deg, var(--su-bubble-user), var(--su-brand-deep)); color: #fff;
   font-family: var(--su-font-display); font-weight: 700; font-size: 21px; letter-spacing: .02em;
   box-shadow: 0 16px 32px -16px rgba(30, 50, 160, .7);
 }

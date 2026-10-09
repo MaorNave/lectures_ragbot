@@ -19,7 +19,8 @@
  *            POST {apiBase}/chat         (fallback when streaming is unavailable)
  *
  * Public API: window.SmartUpWidget.{open, close, toggle, send(text), reset, setSuggestions([...]),
- *             setTheme({'--su-primary': '#...'})}
+ *             (send(text) while an answer is still coming asks it right after; the latest such question wins)
+ *             setTheme({'--su-brand': '#...'})}
  */
 (function () {
   'use strict';
@@ -309,6 +310,7 @@
     open: !!saved.open,
     messages: Array.isArray(saved.messages) ? saved.messages : [],  // {role, text, status, citations, usedFallback, fallbackTier, elapsedMs, timing, traceId}
     busy: false,
+    queued: null,  // a send(text) that arrived while busy; asked when the current answer ends
     unread: 0
   };
   function t(key) { return (STR[state.uiLang] || STR.en)[key]; }
@@ -318,6 +320,13 @@
   // ---------------------------------------------------------------------------------------------
   var root, panel, messagesEl, inputEl, sendBtn, launcherWrap, badgeEl, titleEl, subtitleEl, footerEl, newBtn, closeBtn, launcher;
 
+  // one dark palette in the CSS (.su-theme-dark); "auto" switches it with the visitor's OS setting
+  var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function applyTheme() {
+    var dark = config.theme === 'dark' || (config.theme === 'auto' && !!darkQuery && darkQuery.matches);
+    root.classList.toggle('su-theme-dark', dark);
+  }
+
   function build() {
     if (config.loadCss && config.cssHref && !document.querySelector('link[data-smartup-widget-css]')) {
       var link = el('link', { rel: 'stylesheet', href: config.cssHref, 'data-smartup-widget-css': '1' });
@@ -325,11 +334,16 @@
     }
     var inline = config.mode === 'inline';
     root = el('div', {
-      class: 'su-widget su-theme-' + config.theme + (inline ? ' su-inline su-open' : ''),
+      class: 'su-widget' + (inline ? ' su-inline su-open' : ''),
       'data-position': config.position, 'data-mode': config.mode,
       dir: state.uiLang === 'he' ? 'rtl' : 'ltr'
     });
-    if (config.primary) root.style.setProperty('--su-primary', config.primary);
+    if (config.primary) root.style.setProperty('--su-brand', config.primary);
+    applyTheme();
+    if (config.theme === 'auto' && darkQuery) {
+      if (darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+      else if (darkQuery.addListener) darkQuery.addListener(applyTheme);  // Safari < 14
+    }
 
     // panel
     titleEl = el('div', { class: 'su-title', text: config.title });
@@ -546,7 +560,14 @@
     state.busy = b;
     inputEl.disabled = b;
     sendBtn.disabled = b;
-    if (!b) { inputEl.focus(); }
+    if (b) return;
+    if (state.queued) {  // a question picked (a lecture, a suggestion) while the last answer was still coming
+      var next = state.queued;
+      state.queued = null;
+      setTimeout(function () { send(next); }, 0);
+      return;
+    }
+    inputEl.focus();
   }
 
   function setUnread(n) {
@@ -643,7 +664,11 @@
   // ---------------------------------------------------------------------------------------------
   function send(textArg) {
     var text = (typeof textArg === 'string' ? textArg : inputEl.value).trim();
-    if (!text || state.busy) return;
+    if (!text) return;
+    if (state.busy) {  // the composer is disabled while busy, so only a programmatic send(text) gets here
+      if (typeof textArg === 'string') state.queued = text;
+      return;
+    }
     if (text.length > config.maxChars) text = text.slice(0, config.maxChars);
     inputEl.value = ''; autosize();
 
