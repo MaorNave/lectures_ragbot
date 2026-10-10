@@ -9,10 +9,10 @@
 <link rel="preload" href="/widget/fonts/rubik-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/widget/widget.css" data-smartup-widget-css="1">
 <style>
-  /* the page shares the widget's palette: cool paper, navy ink, and one colour per source */
+  /* the page shares the widget's palette: white paper, deep ink, slide blue, one colour per source, a highlighter */
   :root {
-    --paper: #f3f5f9; --sheet: #ffffff; --ink: #151a30; --muted: #5c6378; --line: #dce1eb; --line-strong: #c7cedc;
-    --primary: #2b4acb; --hover: #eef1f7;
+    --paper: #ffffff; --shelf: #f4f5fa; --ink: #12163a; --muted: #5e6283; --line: #e3e5ef; --line-strong: #cdd1e1;
+    --primary: #2b4acb; --hover: #e9ebf4; --mark: #ffe14d;
     --tier-v2: #2b4acb; --tier-tedx: #e62b1e; --tier-v1: #6f778b; --tier-outsource: #0f8b7f;
     --ok: #16935a; --warn: #b7791f; --bad: #c4302b;
     --font: "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Hebrew", Arial, sans-serif;
@@ -21,8 +21,8 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #0e1220; --sheet: #141a2b; --ink: #e8ebf4; --muted: #9aa1b8; --line: #242b40; --line-strong: #353d58;
-      --primary: #8fa3ff; --hover: #1b2236;
+      --paper: #0c0f2a; --shelf: #10143a; --ink: #e9ebf7; --muted: #9da2c4; --line: #222759; --line-strong: #343a72;
+      --primary: #8fa3ff; --hover: #1a1f4a; --mark: #f5d63d;
       --tier-v2: #8fa3ff; --tier-tedx: #ff6b5e; --tier-v1: #a2aabf; --tier-outsource: #3cc4b3;
       --ok: #3fcf8e; --warn: #e7b04d; --bad: #ff7b74;
       color-scheme: dark;
@@ -33,139 +33,168 @@
   body { font-family: var(--font); color: var(--ink); background: var(--paper); -webkit-font-smoothing: antialiased; }
   button { font-family: inherit; }
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  ::selection { background: var(--mark); color: #12163a; }
   [hidden] { display: none !important; }
 
-  .app { display: grid; grid-template-columns: 312px minmax(0, 1fr); height: 100vh; height: 100dvh; }
+  .app { display: grid; grid-template-columns: 328px minmax(0, 1fr); height: 100vh; height: 100dvh; }
 
-  /* ---- sidebar: the lecture library, one tab per source, in the order they are searched -------------- */
-  .sidebar {
-    background: var(--sheet); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-  }
-  .brand { display: flex; align-items: center; gap: 12px; padding: 18px 18px 14px; }
+  /* ---- sidebar: your chats, and the lectures as a slide sorter --------------------------------------- */
+  .sidebar { background: var(--shelf); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 16px 16px 12px; }
   .mark {
-    width: 38px; height: 38px; border-radius: 10px; flex: none; display: grid; place-items: center;
-    background: var(--tier-v2); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 15px;
+    width: 36px; height: 36px; border-radius: 6px; flex: none; display: grid; place-items: center;
+    background: var(--tier-v2); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 14px;
   }
-  @media (prefers-color-scheme: dark) { .mark { background: #3a52d4; } }
-  .brand-name { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.15; }
-  .brand-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  @media (prefers-color-scheme: dark) { .mark { background: #3048d6; } }
+  .brand-name { font-family: var(--font-display); font-size: 16.5px; font-weight: 600; letter-spacing: -.01em; line-height: 1.15; }
+  .brand-sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
   .close-drawer { display: none; margin-left: auto; }
 
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 14px 12px; padding: 4px; border-radius: 10px; background: var(--hover); }
+  .tab {
+    border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; background: transparent; color: var(--muted);
+    font-family: var(--font-display); font-size: 13.5px; font-weight: 600;
+  }
+  .tab[aria-selected="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgba(18, 22, 58, .12); }
+  .tab .n { font-weight: 500; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 14px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+  /* chats: newest first; the open one is marked with the highlighter */
+  .chat-item { position: relative; display: flex; align-items: stretch; border-radius: 8px; }
+  .chat-item:hover { background: var(--hover); }
+  .chat-open {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: left; cursor: pointer;
+    border: 0; background: transparent; color: inherit; padding: 8px 6px 8px 12px; border-radius: 8px;
+  }
+  .chat-title { font-size: 13.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-title[dir="rtl"] { text-align: right; }
+  .chat-when { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chat-item.active { background: var(--paper); box-shadow: inset 3px 0 0 var(--mark), 0 1px 2px rgba(18, 22, 58, .08); }
+  .chat-item.active .chat-title { font-weight: 600; }
+  .chat-del {
+    flex: none; width: 30px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 8px;
+    display: grid; place-items: center; opacity: 0; transition: opacity .12s;
+  }
+  .chat-item:hover .chat-del, .chat-del:focus-visible { opacity: 1; }
+  .chat-del:hover { color: var(--bad); }
+  .chat-del svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+  .day { font-size: 12px; color: var(--muted); margin: 12px 6px 4px; }
+  .day:first-child { margin-top: 2px; }
+  .empty-note { font-size: 13.5px; color: var(--muted); line-height: 1.5; padding: 6px 8px; }
+
+  /* lectures: each source a numbered group in search order; each lecture a slide in the source's colour */
   .filter {
-    display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 8px 11px; border-radius: 10px;
+    display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 8px 11px; border-radius: 9px;
     background: var(--paper); border: 1px solid var(--line); color: var(--muted); transition: border-color .15s;
   }
   .filter:focus-within { border-color: var(--primary); }
   .filter input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; color: var(--ink); }
   .filter input::placeholder { color: var(--muted); }
-  .filter input::-webkit-search-cancel-button { cursor: pointer; }
   .filter svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
-
-  .lectures { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
   .t-v2 { --c: var(--tier-v2); } .t-tedx { --c: var(--tier-tedx); } .t-v1 { --c: var(--tier-v1); } .t-outsource { --c: var(--tier-outsource); }
-
-  /* a source: its number in the search order, name, what it is for; open, its lectures hang off a rail in its colour */
-  .group { margin-bottom: 2px; }
-  .group > summary {
-    list-style: none; cursor: pointer; user-select: none; border-radius: 10px;
-    display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline;
-    padding: 9px 10px 9px 8px;
-  }
-  .group > summary::-webkit-details-marker { display: none; }
-  .group > summary:hover { background: var(--hover); }
+  .group { margin: 4px 0 14px; }
+  .g-head { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 9px; align-items: baseline; padding: 0 4px 8px; }
   .g-num {
-    grid-row: span 2; align-self: start; margin-top: 1px;
-    width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+    grid-row: span 2; align-self: start; width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center;
     font-family: var(--font-display); font-size: 12px; font-weight: 700; color: #fff; background: var(--c);
   }
-  @media (prefers-color-scheme: dark) { .g-num { color: #0e1220; } }
-  .g-name { font-family: var(--font-display); font-size: 14.5px; font-weight: 600; letter-spacing: -.005em; }
+  @media (prefers-color-scheme: dark) { .g-num { color: #0c0f2a; } }
+  .g-name { font-family: var(--font-display); font-size: 14.5px; font-weight: 600; }
   .g-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .g-role { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
-  .g-list { margin: 2px 0 8px 18px; padding-left: 12px; border-left: 2px solid var(--c); }
-
-  .lect {
-    display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 8px; align-items: baseline; width: 100%; text-align: left;
-    background: none; border: 0; color: inherit; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background .12s;
+  .g-role { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+  .slides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .slide {
+    aspect-ratio: 16 / 10; display: flex; flex-direction: column; justify-content: space-between; gap: 4px;
+    padding: 8px 9px; border-radius: 5px; cursor: pointer; text-align: left; color: var(--ink);
+    background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--c);
+    transition: border-color .12s, transform .12s;
   }
-  .lect:hover { background: var(--hover); }
-  .lect .num {
-    font-family: var(--font-display); font-size: 12.5px; font-weight: 600; color: var(--c);
-    font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap;
-  }
-  .lect .main { display: block; min-width: 0; font-size: 13.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lib-state { font-size: 13.5px; color: var(--muted); padding: 10px; line-height: 1.5; }
-  .lib-state code { font-size: 12.5px; }
+  .slide:hover { border-color: var(--c); }
+  .slide:active { transform: scale(.98); }
+  .slide .num { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; color: var(--c); letter-spacing: -.02em; }
+  .slide .topic { font-size: 12px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .lib-state { font-size: 13.5px; color: var(--muted); padding: 8px; line-height: 1.5; }
 
-  .side-foot { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 18px 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .side-foot { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 11px 16px 13px; border-top: 1px solid var(--line); font-size: 12.5px; }
   .side-foot a { color: var(--muted); text-decoration: none; }
   .side-foot a:hover { color: var(--ink); text-decoration: underline; }
 
   /* ---- main column ---------------------------------------------------------------------------------- */
   .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .topbar { display: flex; align-items: center; gap: 10px; padding: 12px 20px; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 12px 20px; }
   .tt-main { font-family: var(--font-display); font-size: 16px; font-weight: 600; display: none; }
   .spacer { flex: 1; }
-  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
   .status i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line-strong); }
   .status.ok i { background: var(--ok); }
   .status.degraded i { background: var(--warn); }
   .status.down i { background: var(--bad); }
+  .status.busy { color: var(--ink); }
+  .status.busy i { background: var(--primary); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
   .btn {
     display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; padding: 7px 13px;
-    border-radius: 10px; border: 1px solid var(--line-strong); background: var(--sheet); color: var(--ink); cursor: pointer;
-    transition: border-color .15s, background .15s;
+    border-radius: 8px; border: 0; background: var(--ink); color: var(--paper); cursor: pointer; transition: opacity .15s;
   }
-  .btn:hover { border-color: var(--ink); }
+  .btn:hover { opacity: .86; }
   .btn svg, .icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; }
   .icon-btn {
-    display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px;
-    border: 1px solid var(--line-strong); background: var(--sheet); color: var(--ink); cursor: pointer;
+    display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 9px;
+    border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); cursor: pointer;
   }
   .chat { flex: 1; min-height: 0; }
   .chat .su-widget { height: 100%; }
-  .scrim { position: fixed; inset: 0; background: rgba(14, 18, 32, .45); z-index: 15; }
+  .scrim { position: fixed; inset: 0; background: rgba(12, 15, 42, .45); z-index: 15; }
   @media (min-width: 921px) { .scrim { display: none; } }  /* a drawer left open on a narrow window must not cover the page */
 
   @media (max-width: 920px) {
     .app { grid-template-columns: minmax(0, 1fr); }
     .sidebar {
-      position: fixed; inset: 0 auto 0 0; width: min(340px, 88vw); z-index: 20; border-right: 0;
+      position: fixed; inset: 0 auto 0 0; width: min(350px, 90vw); z-index: 20; border-right: 0;
       transform: translateX(-102%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s;
     }
-    .sidebar.open { transform: none; visibility: visible; transition: transform .22s ease; box-shadow: 0 0 60px rgba(14, 18, 32, .3); }
+    .sidebar.open { transform: none; visibility: visible; transition: transform .22s ease; box-shadow: 0 0 60px rgba(12, 15, 42, .3); }
     .icon-btn, .close-drawer { display: inline-flex; }
     .tt-main { display: block; }
-    .topbar { padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--sheet); }
-    .btn { padding: 8px 10px; }
+    .topbar { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .btn { padding: 9px 10px; }
     .btn span { display: none; }
   }
   @media (max-width: 520px) { .status span { display: none; } }
-  @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } .status.busy i { animation: none; } }
 </style>
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar" id="sidebar" aria-label="Lecture library">
+  <aside class="sidebar" id="sidebar" aria-label="Chats and lectures">
     <div class="brand">
       <div class="mark" aria-hidden="true">SU</div>
       <div>
         <div class="brand-name">SmartUp Academy</div>
         <div class="brand-sub">Yonatan Stern’s course, searchable</div>
       </div>
-      <button class="icon-btn close-drawer" id="close-drawer" type="button" aria-label="Close the lecture list">
+      <button class="icon-btn close-drawer" id="close-drawer" type="button" aria-label="Close the side panel">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>
       </button>
     </div>
 
-    <label class="filter">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
-      <input id="filter" type="search" placeholder="Find a lecture by topic or title" autocomplete="off" aria-label="Find a lecture">
-    </label>
-    <div class="lectures" id="lectures" aria-label="Sources, in the order they are searched">
-      <div class="lib-state">Loading the lectures…</div>
+    <div class="tabs" role="tablist" aria-label="Side panel">
+      <button class="tab" id="tab-chats" role="tab" aria-controls="pane-chats" type="button">Chats<span class="n" id="chat-count"></span></button>
+      <button class="tab" id="tab-lectures" role="tab" aria-controls="pane-lectures" type="button">Lectures<span class="n" id="lecture-count"></span></button>
     </div>
+
+    <section class="pane" id="pane-chats" role="tabpanel" aria-labelledby="tab-chats">
+      <div class="scroll" id="chats"></div>
+    </section>
+
+    <section class="pane" id="pane-lectures" role="tabpanel" aria-labelledby="tab-lectures" hidden>
+      <label class="filter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
+        <input id="filter" type="search" placeholder="Find a lecture by topic" autocomplete="off" aria-label="Find a lecture">
+      </label>
+      <div class="scroll" id="lectures" aria-label="Sources, in the order they are searched"><div class="lib-state">Loading the lectures…</div></div>
+    </section>
 
     <nav class="side-foot" aria-label="More">
       <a href="/docs">API docs</a>
@@ -176,12 +205,12 @@
 
   <div class="main">
     <header class="topbar">
-      <button class="icon-btn" id="menu" type="button" aria-label="Show the lecture list" aria-controls="sidebar" aria-expanded="false">
+      <button class="icon-btn" id="menu" type="button" aria-label="Show chats and lectures" aria-controls="sidebar" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round"/></svg>
       </button>
       <span class="tt-main">Ask the lectures</span>
       <div class="spacer"></div>
-      <span class="status" id="health" role="status"><i></i><span>Checking…</span></span>
+      <span class="status" id="health" role="status" aria-live="polite"><i></i><span>Checking the server…</span></span>
       <button class="btn" id="newchat" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span>New chat</span>
       </button>
@@ -190,19 +219,35 @@
   </div>
 </div>
 
-<!-- The same widget that embeds on the website, rendered inline as the full chat -->
+<!-- The same widget that embeds on the website, rendered inline as the full chat; here it keeps every conversation -->
 <script src="/widget/widget.js" data-mode="inline" data-target="#chat" data-storage-key="fullpage" data-theme="auto"
-        data-title="SmartUp Academy Assistant" data-lang="auto"></script>
+        data-title="SmartUp Academy Assistant" data-lang="auto" data-history="on"></script>
 <script>
 (function () {
   var apiBase = location.origin;
-  var SUGGESTIONS = [
-    'What does Yonatan say about profitability versus growth?',
-    'מה שיעורי הבית של הרצאה 5?',
-    'How should I price my product according to the course?',
-    'Which lectures discuss branding?',
-    'מה ההבדל בין הרצאה 1 בגרסה v1 ובגרסה v2?',
-    'Summarize lecture 10'
+  // questions to start with, by what founders ask about
+  var TOPICS = [
+    { label: 'Money', items: [
+      'How should I price my product according to the course?',
+      'What does Yonatan say about profitability versus growth?',
+      'How do I build a financial model for a startup?'
+    ] },
+    { label: 'Customers', items: [
+      'What is Jobs to be Done, with an example from the course?',
+      'How do I find a market opportunity worth building for?',
+      'Which lectures discuss branding?'
+    ] },
+    { label: 'Building the company', items: [
+      'Why should you not be first to market?',
+      'How should a pitch deck be structured?',
+      'What does the course say about hiring the first employees?',
+      'Summarize lecture 10'
+    ] },
+    { label: 'בעברית', items: [
+      'מה שיעורי הבית של הרצאה 5?',
+      'למה רוב הסטארטאפים נכשלים?',
+      'מה ההבדל בין הרצאה 1 בגרסה v1 ובגרסה v2?'
+    ] }
   ];
   // the four sources, in the order the assistant searches them
   var TIERS = {
@@ -214,8 +259,9 @@
   var sidebar = document.getElementById('sidebar'), scrim = document.getElementById('scrim'), menu = document.getElementById('menu');
 
   function widget() { return window.SmartUpWidget; }
+  function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function ask(text) { if (widget()) widget().send(text); closeDrawer(); }
-  if (widget()) widget().setSuggestions(SUGGESTIONS);
+  if (widget()) widget().setSuggestions(TOPICS);
 
   // ---- drawer (narrow screens) ----
   function openDrawer() { sidebar.classList.add('open'); scrim.hidden = false; menu.setAttribute('aria-expanded', 'true'); }
@@ -224,75 +270,158 @@
   scrim.addEventListener('click', closeDrawer);
   document.getElementById('close-drawer').addEventListener('click', closeDrawer);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
-  document.getElementById('newchat').addEventListener('click', function () { if (widget()) widget().reset(); });
+  document.getElementById('newchat').addEventListener('click', function () { if (widget()) widget().newChat(); closeDrawer(); });
 
-  // ---- status ----
-  function setStatus(kind, text, title) {
+  // ---- side panel tabs ----
+  var TAB_KEY = 'smartup-page:tab';
+  function showTab(name) {
+    ['chats', 'lectures'].forEach(function (n) {
+      document.getElementById('tab-' + n).setAttribute('aria-selected', String(n === name));
+      document.getElementById('pane-' + n).hidden = n !== name;
+    });
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* remembering the tab is a convenience */ }
+  }
+  document.getElementById('tab-chats').addEventListener('click', function () { showTab('chats'); });
+  document.getElementById('tab-lectures').addEventListener('click', function () { showTab('lectures'); });
+  var savedTab = null;
+  try { savedTab = localStorage.getItem(TAB_KEY); } catch (e) { /* ignore */ }
+
+  // ---- status: rechecked every minute (every 10 s while something is wrong); "Answering…" while a chat runs ----
+  var health = { kind: '', text: 'Checking the server…', title: '' }, busy = false, nextCheck = null;
+  function paintStatus() {
     var pill = document.getElementById('health');
+    var kind = busy ? 'busy' : health.kind, text = busy ? 'Answering…' : health.text;
     pill.className = 'status ' + kind;
     pill.querySelector('span').textContent = text;
-    pill.title = title || text;
+    pill.title = health.title || text;
   }
-  fetch(apiBase + '/health').then(function (r) { return r.json(); }).then(function (h) {
-    var ix = h.index || {}, ol = h.ollama || {}, rr = h.reranker || {};
-    var problems = [];
-    if (!ol.ok) problems.push('Ollama is not running');
-    else {
-      if (ol.model_present === false) problems.push(h.chat_model + ' is not downloaded');
-      if (ol.embed_model_present === false) problems.push(h.embed_model + ' is not downloaded');
+  function checkHealth() {
+    clearTimeout(nextCheck);
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timeout = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
+    fetch(apiBase + '/health', { cache: 'no-store', signal: ctrl && ctrl.signal }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (h) {
+      var ix = h.index || {}, ol = h.ollama || {}, rr = h.reranker || {};
+      var problems = [];
+      if (!ol.ok) problems.push('Ollama isn’t running');
+      else {
+        if (ol.model_present === false) problems.push(h.chat_model + ' isn’t downloaded');
+        if (ol.embed_model_present === false) problems.push(h.embed_model + ' isn’t downloaded');
+      }
+      if (!ix.ok) problems.push('The index isn’t built');
+      health = {
+        kind: h.status === 'ok' ? 'ok' : 'degraded',
+        text: h.status === 'ok' ? 'Ready' : (problems[0] || 'Partly working'),
+        title: 'Chat model: ' + h.chat_model + '\nEmbeddings: ' + h.embed_model +
+          '\nIndex: ' + (ix.ok ? ix.lectures + ' lectures, ' + ix.passages + ' passages' : 'not available') +
+          '\nReranker: ' + (rr.enabled === false ? 'off' : (rr.model || '') + (rr.loaded ? ' (loaded)' : ' (loads with the first question)'))
+      };
+    }).catch(function () {
+      health = { kind: 'down', text: 'Can’t reach the server', title: 'Start it with: python main.py' };
+    }).then(function () {
+      clearTimeout(timeout);
+      paintStatus();
+      nextCheck = setTimeout(checkHealth, health.kind === 'ok' ? 60000 : 10000);
+    });
+  }
+  document.addEventListener('smartup:busy', function (e) {
+    busy = !!(e.detail && e.detail.busy);
+    paintStatus();
+    if (!busy) checkHealth();  // an answer just ended: confirm the server is still fine
+  });
+  paintStatus();
+  checkHealth();
+
+  // ---- chats ----
+  function dayLabel(ts) {
+    var d = new Date(ts), today = new Date(); today.setHours(0, 0, 0, 0);
+    var diff = Math.round((today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    if (diff <= 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    if (diff < 7) return 'Earlier this week';
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+  }
+  function timeLabel(ts) { return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+  var DEL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>';
+  function renderChats(chats) {
+    var box = document.getElementById('chats'); box.textContent = '';
+    document.getElementById('chat-count').textContent = chats.length ? String(chats.length) : '';
+    if (!chats.length) {
+      box.appendChild(node('p', 'empty-note', 'Your chats are saved here, on this computer. Ask a question to start one.'));
+      return;
     }
-    if (!ix.ok) problems.push('the index is not built');
-    var title = 'Chat model: ' + h.chat_model + '\nEmbeddings: ' + h.embed_model +
-      '\nIndex: ' + (ix.ok ? ix.lectures + ' lectures, ' + ix.passages + ' passages' : 'not available') +
-      '\nReranker: ' + (rr.enabled === false ? 'off' : (rr.model || '') + (rr.loaded ? ' (loaded)' : ' (loads with the first question)'));
-    if (h.status === 'ok') setStatus('ok', 'Ready', title);
-    else setStatus('degraded', problems.length ? problems[0].charAt(0).toUpperCase() + problems[0].slice(1) : 'Partly working', title);
-  }).catch(function () { setStatus('down', 'Can’t reach the server'); });
+    var lastDay = null;
+    chats.forEach(function (c) {
+      var day = dayLabel(c.updatedAt);
+      if (day !== lastDay) { box.appendChild(node('div', 'day', day)); lastDay = day; }
+      var item = node('div', 'chat-item' + (c.active ? ' active' : ''));
+      var open = node('button', 'chat-open'); open.type = 'button';
+      if (c.active) open.setAttribute('aria-current', 'true');
+      var title = node('span', 'chat-title', c.title || 'Untitled chat');
+      title.dir = widget() && widget().isHebrew(c.title) ? 'rtl' : 'auto';
+      open.appendChild(title);
+      open.appendChild(node('span', 'chat-when', timeLabel(c.updatedAt)));
+      open.title = c.title;
+      open.addEventListener('click', function () { widget().openChat(c.id); closeDrawer(); });
+      var del = node('button', 'chat-del'); del.type = 'button'; del.innerHTML = DEL_ICON;
+      del.setAttribute('aria-label', 'Delete the chat “' + c.title + '”'); del.title = 'Delete chat';
+      del.addEventListener('click', function () { widget().deleteChat(c.id); });
+      item.appendChild(open); item.appendChild(del);
+      box.appendChild(item);
+    });
+  }
+  document.addEventListener('smartup:chats', function (e) { renderChats(e.detail || []); });
+  var initialChats = widget() ? widget().listChats() : [];
+  renderChats(initialChats);
+  showTab(savedTab === 'lectures' || savedTab === 'chats' ? savedTab : (initialChats.length ? 'chats' : 'lectures'));
 
-  // ---- lecture library ----
-  var rows = [];
-  function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
-
+  // ---- lectures: a slide sorter ----
+  var tiles = [];
   fetch(apiBase + '/lectures').then(function (r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   }).then(function (groups) {
     var box = document.getElementById('lectures'); box.textContent = '';
+    var total = 0;
     // the API returns the groups in search order: v2 → TEDx → v1 → outside the course
     groups.forEach(function (g, gi) {
       var tier = g.tier || g.course_version;
       var info = TIERS[tier] || { name: g.label || tier, role: '' };
-      var details = node('details', 'group t-' + tier);
-      if (gi === 0) details.open = true;
-      var summary = node('summary');
-      summary.appendChild(node('span', 'g-num', String(gi + 1)));
-      summary.appendChild(node('span', 'g-name', info.name));
+      var group = node('section', 'group t-' + tier);
+      var head = node('div', 'g-head');
+      head.appendChild(node('span', 'g-num', String(gi + 1)));
+      head.appendChild(node('span', 'g-name', info.name));
       var count = node('span', 'g-count', String(g.lectures.length));
       count.title = g.lectures.length + (g.lectures.length === 1 ? ' lecture' : ' lectures');
-      summary.appendChild(count);
-      if (info.role) summary.appendChild(node('span', 'g-role', info.role));
-      details.appendChild(summary);
-      var list = node('div', 'g-list');
-      g.lectures.forEach(function (l) {
+      head.appendChild(count);
+      if (info.role) head.appendChild(node('span', 'g-role', info.role));
+      group.appendChild(head);
+      var grid = node('div', 'slides');
+      g.lectures.forEach(function (l, li) {
         var subjects = l.lecture_subjects || [];
         var generic = /^Foundations\b/i.test(l.lecture_title || '');  // "Foundations Course V2 L5 1" says less than the topics
-        var b = node('button', 'lect'); b.type = 'button';
-        var short = l.display ? l.display.replace(/^Lecture\s*/i, 'L').replace(/\s*Part\s*/i, '.') : (tier === 'tedx' ? 'TEDx' : '•');
-        b.appendChild(node('span', 'num', short));
-        b.appendChild(node('span', 'main', generic && subjects.length ? subjects[0] : l.lecture_title));
-        b.title = (l.display ? l.display + ': ' : '') + l.lecture_title + (subjects.length ? '\n\n' + subjects.join('\n') : '') +
-          '\n\nClick for a summary';
+        var b = node('button', 'slide'); b.type = 'button';
+        var num = l.display ? l.display.replace(/^Lecture\s*/i, '').replace(/\s*Part\s*/i, '.') : (tier === 'tedx' ? 'TEDx' : String(li + 1));
+        b.appendChild(node('span', 'num', num));
+        b.appendChild(node('span', 'topic', generic && subjects.length ? subjects[0] : l.lecture_title));
+        b.title = (l.display ? l.display + ': ' : '') + l.lecture_title + (subjects.length ? '\n\n' + subjects.join('\n') : '') + '\n\nClick for a summary';
+        b.setAttribute('aria-label', 'Summarize ' + (l.display || l.lecture_title) + ', ' + info.name);
         b.addEventListener('click', function () {
           if (tier === 'v2' || tier === 'v1') ask('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
           else if (tier === 'tedx') ask("Summarize Yonatan's TEDx talk");
           else ask('Summarize the lecture "' + l.lecture_title + '"');
         });
-        list.appendChild(b);
-        rows.push({ el: b, group: details, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
+        grid.appendChild(b);
+        tiles.push({ el: b, group: group, count: count, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
+        total++;
       });
-      details.appendChild(list);
-      box.appendChild(details);
+      group.appendChild(grid);
+      box.appendChild(group);
     });
+    document.getElementById('lecture-count').textContent = String(total);
+    if (widget()) widget().setDeckInfo(total + ' lectures in ' + groups.length + ' sources');
   }).catch(function () {
     var box = document.getElementById('lectures'); box.textContent = '';
     var msg = node('div', 'lib-state', 'The lecture list isn’t available. Build the index with ');
@@ -304,16 +433,12 @@
   document.getElementById('filter').addEventListener('input', function (e) {
     var q = e.target.value.trim().toLowerCase();
     var shown = new Map();
-    rows.forEach(function (r) {
+    tiles.forEach(function (r) {
       var hit = !q || r.text.indexOf(q) >= 0;
       r.el.hidden = !hit;
       shown.set(r.group, (shown.get(r.group) || 0) + (hit ? 1 : 0));
     });
-    shown.forEach(function (n, group) {
-      group.hidden = n === 0;
-      if (q) group.open = n > 0;
-      group.querySelector('.g-count').textContent = String(n);
-    });
+    tiles.forEach(function (r) { r.group.hidden = shown.get(r.group) === 0; r.count.textContent = String(shown.get(r.group)); });
   });
 
   // the dashboard link appears only when the API shares traces with this browser (DEBUG_DASHBOARD)

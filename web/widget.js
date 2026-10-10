@@ -11,6 +11,8 @@
  *           data-theme="light"                          (light | dark | auto — auto follows the visitor's OS)
  *           data-welcome="..."                          (optional custom welcome message)
  *           data-suggestions='["…", "…"]'              (optional: questions offered before the first message)
+ *           data-history="on"                           (optional: keep every conversation in localStorage so it
+ *                                                         can be reopened; default: one conversation per tab)
  *           data-timing="off"                           (optional: hide the answer stopwatches)
  *           data-no-css                                 (optional: do not auto-load widget.css)
  *           defer></script>
@@ -18,9 +20,12 @@
  * Talks to:  POST {apiBase}/chat/stream  (Server-Sent Events: token* → final | error)
  *            POST {apiBase}/chat         (fallback when streaming is unavailable)
  *
- * Public API: window.SmartUpWidget.{open, close, toggle, send(text), reset, setSuggestions([...]),
- *             (send(text) while an answer is still coming asks it right after; the latest such question wins)
- *             setTheme({'--su-brand': '#...'})}
+ * Public API: window.SmartUpWidget.{open, close, toggle, send(text), newChat(), reset() (= newChat),
+ *             openChat(id), deleteChat(id), listChats(), isBusy(), setSuggestions([...] | [{label, items}]),
+ *             setDeckInfo(text), setTheme({'--su-brand': '#...'})}
+ *   send(text) while an answer is still coming asks it right after (the latest such question wins).
+ *   newChat/openChat while an answer is coming stop it; what had arrived is kept in its conversation.
+ * Events on document: 'smartup:busy' {busy}, 'smartup:chats' [{id, title, updatedAt, count, active}].
  */
 (function () {
   'use strict';
@@ -59,6 +64,9 @@
     timing: ds.timing !== 'off',                       // stopwatches under each answer
     theme: ds.theme === 'dark' || ds.theme === 'auto' ? ds.theme : 'light',
     suggestions: parseList(ds.suggestions),            // questions offered in the empty conversation
+    suggestionGroups: [],                              // the same questions by topic (setSuggestions with groups)
+    deckInfo: '',                                      // the title slide's footnote (setDeckInfo)
+    history: ds.history === 'on',                      // keep every conversation (localStorage), not one per tab
     maxChars: 2000
   };
 
@@ -70,6 +78,8 @@
       subtitle: 'Answers from Yonatan Stern’s lectures',
       heroTitle: 'Ask the lectures.',
       heroText: 'Ask about anything Yonatan Stern teaches in the SmartUp course, in English or Hebrew. Each answer names the lecture it comes from, so you can go back to the source.',
+      waiting: 'Waiting for the previous answer to finish…',
+      askNext: 'Ask next', stopped: 'Stopped: a new chat was started before this answer finished.',
       copy: 'Copy', copied: 'Copied',
       placeholder: 'Ask about the lectures…',
       send: 'Send', open: 'Open chat', close: 'Close chat', newChat: 'New conversation',
@@ -93,6 +103,8 @@
       subtitle: 'תשובות מתוך ההרצאות של יונתן שטרן',
       heroTitle: 'שאלו את ההרצאות.',
       heroText: 'אפשר לשאול על כל נושא שיונתן שטרן מלמד בקורס של SmartUp, בעברית או באנגלית. כל תשובה מציינת את ההרצאה שממנה היא לקוחה, כדי שתוכלו לחזור למקור.',
+      waiting: 'ממתין שהתשובה הקודמת תסתיים…',
+      askNext: 'אפשר לשאול גם', stopped: 'נעצר: שיחה חדשה נפתחה לפני שהתשובה הושלמה.',
       copy: 'העתקה', copied: 'הועתק',
       placeholder: 'שאל/י על ההרצאות…',
       send: 'שליחה', open: 'פתיחת צ׳אט', close: 'סגירת צ׳אט', newChat: 'שיחה חדשה',
@@ -272,28 +284,60 @@
   }
 
   // ---------------------------------------------------------------------------------------------
-  // persistence (sessionStorage — per tab; thread_id links the tab to the server-side memory)
+  // persistence: the floating bubble keeps one conversation per tab (sessionStorage). With data-history="on" (the
+  // full-page chat) every conversation is kept in localStorage and can be reopened; thread_id links each one to the
+  // server-side memory.
   // ---------------------------------------------------------------------------------------------
+  var MAX_CHATS = 60, MAX_MESSAGES = 80;
+  function backend() {
+    try { return config.history ? window.localStorage : window.sessionStorage; } catch (e) { return null; }
+  }
   var store = {
     load: function () {
       try {
-        var raw = sessionStorage.getItem(config.storageKey);
+        var b = backend(), raw = b && b.getItem(config.storageKey);
         var v = raw ? JSON.parse(raw) : null;
         return v && typeof v === 'object' ? v : {};
       } catch (e) { return {}; }
     },
     save: function (state) {
       try {
-        sessionStorage.setItem(config.storageKey, JSON.stringify({
-          threadId: state.threadId || null,
-          uiLang: state.uiLang,
-          open: !!state.open,
-          messages: (state.messages || []).slice(-40)
-        }));
-      } catch (e) { /* storage unavailable: nothing to do */ }
-    },
-    clear: function () { try { sessionStorage.removeItem(config.storageKey); } catch (e) { /* ignore */ } }
+        var b = backend();
+        if (b) {
+          var keep = config.history ? state.chats : state.chats.filter(function (c) { return c.id === state.activeId; });
+          b.setItem(config.storageKey, JSON.stringify({
+            uiLang: state.uiLang,
+            open: !!state.open,
+            activeId: state.activeId,
+            chats: keep.filter(function (c) { return c.messages.length; }).slice(0, MAX_CHATS).map(function (c) {
+              return { id: c.id, threadId: c.threadId || null, title: c.title || '', createdAt: c.createdAt,
+                       updatedAt: c.updatedAt, messages: c.messages.slice(-MAX_MESSAGES) };
+            })
+          }));
+        }
+      } catch (e) { /* storage full or unavailable: the conversation still works, it is just not kept */ }
+      emitChats();
+    }
   };
+
+  function chatId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function blankChat() { var now = Date.now(); return { id: chatId(), threadId: null, title: '', messages: [], createdAt: now, updatedAt: now }; }
+  function titleOf(messages) {
+    var first = (messages || []).filter(function (m) { return m && m.role === 'user' && m.text; })[0];
+    return first ? String(first.text).replace(/\s+/g, ' ').trim().slice(0, 90) : '';
+  }
+  function loadChats(saved) {
+    var chats = (Array.isArray(saved.chats) ? saved.chats : []).filter(function (c) {
+      return c && typeof c.id === 'string' && Array.isArray(c.messages) && c.messages.length;
+    });
+    if (!chats.length && Array.isArray(saved.messages) && saved.messages.length) {  // the single-chat format before history
+      var old = blankChat();
+      old.threadId = saved.threadId || null; old.messages = saved.messages; old.title = titleOf(saved.messages);
+      chats.push(old);
+    }
+    chats.forEach(function (c) { if (!c.title) c.title = titleOf(c.messages); if (!c.updatedAt) c.updatedAt = c.createdAt || Date.now(); });
+    return chats.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+  }
 
   // ---------------------------------------------------------------------------------------------
   // state
@@ -301,15 +345,35 @@
   var saved = store.load();
   var pageLang = (document.documentElement.getAttribute('lang') || '').toLowerCase();
   var state = {
-    threadId: saved.threadId || null,
+    chats: loadChats(saved),
+    activeId: null,
     uiLang: config.lang === 'he' || config.lang === 'en' ? config.lang
       : (saved.uiLang || (pageLang.indexOf('he') === 0 ? 'he' : 'en')),
     open: !!saved.open,
-    messages: Array.isArray(saved.messages) ? saved.messages : [],  // {role, text, status, citations, usedFallback, fallbackTier, elapsedMs, timing, traceId}
     busy: false,
-    queued: null,  // a send(text) that arrived while busy; asked when the current answer ends
+    inflight: null,  // {chatId, stop()} while an answer is coming
+    queued: null,    // a send(text) that arrived while busy; asked when the current answer ends
     unread: 0
   };
+  state.activeId = state.chats.some(function (c) { return c.id === saved.activeId; }) ? saved.activeId
+    : (state.chats[0] ? state.chats[0].id : null);
+  if (!state.activeId) { var first = blankChat(); state.chats.unshift(first); state.activeId = first.id; }
+
+  /** The conversation on screen ({id, threadId, title, messages, createdAt, updatedAt}). */
+  function active() {
+    for (var i = 0; i < state.chats.length; i++) if (state.chats[i].id === state.activeId) return state.chats[i];
+    var c = blankChat(); state.chats.unshift(c); state.activeId = c.id; return c;
+  }
+  function listChats() {
+    return state.chats.filter(function (c) { return c.messages.length; }).map(function (c) {
+      return { id: c.id, title: c.title || titleOf(c.messages), updatedAt: c.updatedAt, count: c.messages.length,
+               active: c.id === state.activeId };
+    });
+  }
+  function emit(name, detail) {
+    try { document.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) { /* very old browser */ }
+  }
+  function emitChats() { emit('smartup:chats', listChats()); }
   function t(key) { return (STR[state.uiLang] || STR.en)[key]; }
 
   // ---------------------------------------------------------------------------------------------
@@ -345,7 +409,7 @@
     // panel
     titleEl = el('div', { class: 'su-title', text: config.title });
     subtitleEl = el('div', { class: 'su-subtitle', text: t('subtitle') });
-    newBtn = el('button', { class: 'su-iconbtn', type: 'button', title: t('newChat'), 'aria-label': t('newChat'), html: ICONS.refresh, onclick: reset });
+    newBtn = el('button', { class: 'su-iconbtn', type: 'button', title: t('newChat'), 'aria-label': t('newChat'), html: ICONS.refresh, onclick: newChat });
     closeBtn = el('button', { class: 'su-iconbtn', type: 'button', title: t('close'), 'aria-label': t('close'), html: ICONS.close, onclick: close });
     var header = el('div', { class: 'su-header' }, [
       el('div', { class: 'su-avatar', text: 'SU', 'aria-hidden': 'true' }),
@@ -516,20 +580,33 @@
   /** Before the first question: a welcome screen with suggested questions (inline), or a welcome message (bubble). */
   function emptyState() {
     if (config.mode === 'inline') {
-      // the assistant is bilingual, so the headline is too: English from the left edge, Hebrew from the right
-      var hero = el('div', { class: 'su-hero su-empty' }, [
+      // a title slide (the lectures are slide decks): the bilingual headline, English from the left edge and Hebrew
+      // from the right, with the deck's footnote at the bottom
+      var slide = el('div', { class: 'su-slide' }, [
         el('h2', { class: 'su-hero-title' }, [
           el('span', { class: 'su-hero-line', lang: 'en', dir: 'ltr', text: STR.en.heroTitle }),
           el('span', { class: 'su-hero-line', lang: 'he', dir: 'rtl', text: STR.he.heroTitle })
         ]),
-        el('p', { class: 'su-hero-text', text: config.welcome || t('heroText') })
+        el('div', { class: 'su-slide-foot', dir: 'ltr' }, [
+          el('span', { class: 'su-slide-by', text: 'Yonatan Stern, SmartUp Academy' }),
+          el('span', { class: 'su-slide-meta', text: config.deckInfo })
+        ])
       ]);
-      if (config.suggestions.length) {
-        hero.appendChild(el('div', { class: 'su-suggest-grid' }, config.suggestions.map(suggestionButton)));
+      var hero = el('div', { class: 'su-hero su-empty' }, [slide, el('p', { class: 'su-hero-text', text: config.welcome || t('heroText') })]);
+      var groups = config.suggestionGroups.length ? config.suggestionGroups
+        : (config.suggestions.length ? [{ label: '', items: config.suggestions }] : []);
+      if (groups.length) {
+        hero.appendChild(el('div', { class: 'su-topics' }, groups.map(function (g) {
+          return el('section', { class: 'su-topic', dir: dirOf(g.label || '') }, [
+            g.label ? el('h3', { class: 'su-topic-name', text: g.label }) : null,
+            el('div', { class: 'su-topic-qs' }, g.items.map(suggestionButton))
+          ]);
+        })));
       }
       return hero;
     }
     var node = messageNode({ role: 'bot', text: config.welcome || t('welcome'), status: 'welcome' });
+    node.wrap.classList.remove('su-from-v2');
     node.wrap.classList.add('su-empty');
     if (config.suggestions.length) {
       node.wrap.appendChild(el('div', { class: 'su-suggest' }, config.suggestions.slice(0, 4).map(suggestionButton)));
@@ -540,20 +617,51 @@
   function renderAll() {
     messagesEl.innerHTML = '';
     applyLang();
-    if (!state.messages.length) messagesEl.appendChild(emptyState());
-    else state.messages.forEach(function (m) { messagesEl.appendChild(messageNode(m).wrap); });
-    scrollToBottom(true);
+    var messages = active().messages;
+    if (!messages.length) messagesEl.appendChild(emptyState());
+    else messages.forEach(function (m) { messagesEl.appendChild(messageNode(m).wrap); });
+    showFollowUps();
+    if (messages.length) {
+      scrollToBottom(true);
+      // web fonts arriving later make the conversation taller: keep a reopened conversation at its end
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { scrollToBottom(true); });
+    } else messagesEl.scrollTop = 0;  // the start screen reads from the top
   }
 
-  function pushMessage(msg) {
+  /** Add a message to a conversation (the one on screen unless given) and save it; draws it when it is on screen. */
+  function pushMessage(msg, chat) {
+    chat = chat || active();
+    chat.messages.push(msg);
+    chat.updatedAt = Date.now();
+    if (!chat.title && msg.role === 'user') chat.title = titleOf(chat.messages);
+    state.chats.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    store.save(state);
+    if (chat.id !== state.activeId) return null;
     var empty = messagesEl.querySelector('.su-empty');  // the welcome screen gives way to the conversation
     if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
-    state.messages.push(msg);
-    store.save(state);
     var node = messageNode(msg);
     messagesEl.appendChild(node.wrap);
     scrollToBottom(true);
     return node;
+  }
+
+  /** Full page only: three suggested questions not asked yet in this conversation, under its latest answer. */
+  function showFollowUps() {
+    var old = messagesEl.querySelector('.su-next');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var messages = active().messages, last = messages[messages.length - 1];
+    if (config.mode !== 'inline' || state.busy || !last || last.role !== 'bot' || last.status !== 'answered') return;
+    var asked = {};
+    messages.forEach(function (m) { if (m.role === 'user') asked[String(m.text).trim().toLowerCase()] = true; });
+    var pool = config.suggestions.filter(function (q) { return !asked[q.trim().toLowerCase()]; });
+    if (!pool.length) return;
+    var start = messages.length % pool.length, pick = [];
+    for (var i = 0; i < Math.min(3, pool.length); i++) pick.push(pool[(start + i * 3) % pool.length]);
+    pick = pick.filter(function (q, i) { return pick.indexOf(q) === i; });
+    messagesEl.appendChild(el('div', { class: 'su-next' }, [
+      el('div', { class: 'su-next-label', text: t('askNext') }),
+      el('div', { class: 'su-next-qs' }, pick.map(suggestionButton))
+    ]));
   }
 
   function typingNode(label) {
@@ -571,7 +679,10 @@
     state.busy = b;
     inputEl.disabled = b;
     sendBtn.disabled = b;
+    emit('smartup:busy', { busy: b });
     if (b) return;
+    state.inflight = null;
+    showFollowUps();
     if (state.queued) {  // a question picked (a lecture, a suggestion) while the last answer was still coming
       var next = state.queued;
       state.queued = null;
@@ -593,9 +704,9 @@
   function BusyError() { this.name = 'BusyError'; this.message = 'busy'; }
   BusyError.prototype = Object.create(Error.prototype);
 
-  function requestBody(text) {
+  function requestBody(text, chat) {
     var body = { message: text };
-    if (state.threadId) body.thread_id = state.threadId;
+    if (chat.threadId) body.thread_id = chat.threadId;
     return JSON.stringify(body);
   }
 
@@ -619,11 +730,12 @@
    * POST /chat/stream and dispatch SSE events. Resolves with the `final` payload, or null when
    * the stream ended without one. Rejects with BusyError on 429 and Error on other failures.
    */
-  function streamChat(text, onToken, onError, onStatus) {
+  function streamChat(text, chat, signal, onToken, onError, onStatus) {
     return fetch(config.apiBase + '/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-      body: requestBody(text)
+      body: requestBody(text, chat),
+      signal: signal
     }).then(function (res) {
       if (res.status === 429) throw new BusyError();
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -658,11 +770,12 @@
     });
   }
 
-  function postChat(text) {
+  function postChat(text, chat, signal) {
     return fetch(config.apiBase + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: requestBody(text)
+      body: requestBody(text, chat),
+      signal: signal
     }).then(function (res) {
       if (res.status === 429) throw new BusyError();
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -687,7 +800,14 @@
       var wanted = isHebrew(text) ? 'he' : 'en';
       if (wanted !== state.uiLang) { state.uiLang = wanted; applyLang(); store.save(state); }
     }
-    pushMessage({ role: 'user', text: text });
+    var chat = active();  // the answer belongs to this conversation, even if another one is opened meanwhile
+    pushMessage({ role: 'user', text: text }, chat);
+    var controller = window.AbortController ? new AbortController() : null, aborted = false, waitTimer = null;
+    state.inflight = { chatId: chat.id, stop: function () {
+      aborted = true;
+      if (controller) controller.abort();
+      if (waitTimer) { clearTimeout(waitTimer); waitTimer = null; stopped(); }  // between retries: nothing to abort
+    } };
     setBusy(true);
 
     var watch = config.timing ? startStopwatch(state.uiLang) : null;  // starts as the question is sent
@@ -720,7 +840,7 @@
       scrollToBottom(false);
     }
     function onToken(tok) {
-      if (!tok) return;
+      if (!tok || aborted) return;
       tokens++; draft += tok;
       ensureStreamNode();
       if (!rafPending) { rafPending = true; (window.requestAnimationFrame || setTimeout)(paint); }
@@ -732,7 +852,7 @@
     function finish(payload, note) {
       var timing = watch ? watch.stop() : null;
       cleanupTransient();
-      if (payload && payload.thread_id) state.threadId = payload.thread_id;
+      if (payload && payload.thread_id) chat.threadId = payload.thread_id;
       pushMessage({
         role: 'bot',
         text: payload.answer || '',
@@ -745,42 +865,65 @@
         timing: timing,
         traceId: payload.trace_id || null,
         note: note || null
-      });
-      store.save(state);
+      }, chat);
       if (!state.open) setUnread(state.unread + 1);
+      setBusy(false);
+    }
+    function stopped() {  // a new chat was opened: keep what arrived in the conversation it belongs to
+      if (watch) watch.cancel();
+      cleanupTransient();
+      pushMessage(draft ? { role: 'bot', text: draft, status: 'answered', note: t('stopped') }
+                        : { role: 'bot', text: t('stopped'), status: 'error' }, chat);
       setBusy(false);
     }
     function fail(kind) {
       if (watch) watch.cancel();
       cleanupTransient();
       var msg = kind === 'busy' ? t('busy') : t('error');
-      var node = messageNode({ role: 'bot', text: msg, status: 'error' });
-      messagesEl.appendChild(node.wrap);
-      scrollToBottom(true);
+      if (chat.id === state.activeId) {
+        messagesEl.appendChild(messageNode({ role: 'bot', text: msg, status: 'error' }).wrap);
+        scrollToBottom(true);
+      }
       setBusy(false);
     }
     function fallbackToPost(reason) {
       if (typing.parentNode === null && !streamNode) messagesEl.appendChild(typing);
       var label = typing.querySelector('.su-typing-label'); if (label) label.textContent = t('thinking');
-      return postChat(text).then(function (payload) { finish(payload, null); })
-        .catch(function (err) { fail(err instanceof BusyError ? 'busy' : 'error'); });
+      return postChat(text, chat, controller && controller.signal).then(function (payload) { finish(payload, null); })
+        .catch(function (err) { if (aborted) return stopped(); fail(err instanceof BusyError ? 'busy' : 'error'); });
     }
 
-    streamChat(text, onToken, function (message) { serverError = message || 'error'; }, onStatus)
-      .then(function (finalPayload) {
-        if (finalPayload) return finish(finalPayload, null);
-        if (serverError) return fail('error');
-        if (tokens > 0) {
-          // stream broke after tokens arrived: keep what we have rather than re-running the model
-          return finish({ answer: draft, status: 'answered', thread_id: state.threadId }, t('interrupted'));
-        }
-        return fallbackToPost('no-final');
-      })
-      .catch(function (err) {
-        if (err instanceof BusyError) return fail('busy');
-        if (tokens > 0) return finish({ answer: draft, status: 'answered', thread_id: state.threadId }, t('interrupted'));
-        return fallbackToPost(String(err && err.message || err));
-      });
+    // the server answers two chats at a time; a stopped answer can hold a slot for a few more seconds, so a "busy"
+    // reply is retried for up to a minute instead of failing at once
+    var sentAt = Date.now();
+    function attempt() {
+      waitTimer = null;
+      if (aborted) return stopped();
+      return streamChat(text, chat, controller && controller.signal, onToken, function (message) { serverError = message || 'error'; }, onStatus)
+        .then(onDone, onFail);
+    }
+    function onFail(err) {
+      if (aborted) return stopped();
+      if (err instanceof BusyError && Date.now() - sentAt < 60000) {
+        onStatus(t('waiting'));
+        waitTimer = setTimeout(attempt, 2500);
+        return;
+      }
+      if (err instanceof BusyError) return fail('busy');
+      if (tokens > 0) return finish({ answer: draft, status: 'answered', thread_id: chat.threadId }, t('interrupted'));
+      return fallbackToPost(String(err && err.message || err));
+    }
+    function onDone(finalPayload) {
+      if (aborted) return stopped();
+      if (finalPayload) return finish(finalPayload, null);
+      if (serverError) return fail('error');
+      if (tokens > 0) {
+        // stream broke after tokens arrived: keep what we have rather than re-running the model
+        return finish({ answer: draft, status: 'answered', thread_id: chat.threadId }, t('interrupted'));
+      }
+      return fallbackToPost('no-final');
+    }
+    attempt();
   }
 
   function open(silent) {
@@ -802,20 +945,60 @@
     store.save(state);
   }
   function toggle() { if (state.open) close(); else open(); }
-  function reset() {
-    if (state.busy) return;
-    state.threadId = null;
-    state.messages = [];
+  /** Stop the answer that is coming (it is kept, as far as it got, in its own conversation). */
+  function stopAnswer() {
+    state.queued = null;
+    if (state.busy && state.inflight) state.inflight.stop();
+  }
+  function newChat() {
+    stopAnswer();
+    var current = active();
+    if (current.messages.length) {
+      var c = blankChat();
+      state.chats.unshift(c);
+      state.activeId = c.id;
+      if (!config.history) state.chats = [c];  // one conversation per tab: the old one is not kept
+    }
     store.save(state);
     renderAll();
     inputEl.focus();
   }
+  function openChat(id) {
+    if (id === state.activeId || !state.chats.some(function (c) { return c.id === id; })) return;
+    stopAnswer();
+    state.chats = state.chats.filter(function (c) { return c.messages.length || c.id === id; });  // drop an unused blank
+    state.activeId = id;
+    store.save(state);
+    renderAll();
+  }
+  function deleteChat(id) {
+    if (state.inflight && state.inflight.chatId === id) stopAnswer();
+    state.chats = state.chats.filter(function (c) { return c.id !== id; });
+    if (id === state.activeId) {
+      state.activeId = null;
+      active();  // a fresh blank conversation
+      renderAll();
+    }
+    store.save(state);
+  }
   function setTheme(vars) {
     Object.keys(vars || {}).forEach(function (k) { root.style.setProperty(k, vars[k]); });
   }
+  /** Questions to offer: a list, or topics [{label, items: [...]}] shown as groups on the full page. */
   function setSuggestions(list) {
-    config.suggestions = (Array.isArray(list) ? list : []).map(String).filter(Boolean);
-    if (root && !state.messages.length) renderAll();  // only the empty conversation shows them
+    list = Array.isArray(list) ? list : [];
+    var grouped = list.length && typeof list[0] === 'object';
+    config.suggestionGroups = grouped ? list.map(function (g) {
+      return { label: String(g.label || ''), items: (g.items || []).map(String).filter(Boolean) };
+    }).filter(function (g) { return g.items.length; }) : [];
+    config.suggestions = grouped ? [].concat.apply([], config.suggestionGroups.map(function (g) { return g.items; }))
+      : list.map(String).filter(Boolean);
+    if (root) renderAll();
+  }
+  function setDeckInfo(text) {
+    config.deckInfo = String(text || '');
+    var meta = root && root.querySelector('.su-slide-meta');
+    if (meta) meta.textContent = config.deckInfo;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -827,9 +1010,11 @@
   }
   window.SmartUpWidget = {
     _mounted: true, config: config,
-    open: function () { open(); }, close: close, toggle: toggle, send: send, reset: reset, setTheme: setTheme,
-    setSuggestions: setSuggestions,
+    open: function () { open(); }, close: close, toggle: toggle, send: send, setTheme: setTheme,
+    newChat: newChat, reset: newChat, openChat: openChat, deleteChat: deleteChat, listChats: listChats,
+    isBusy: function () { return state.busy; }, setSuggestions: setSuggestions, setDeckInfo: setDeckInfo,
     renderMarkdown: renderMarkdown, isHebrew: isHebrew
   };
   mount();
+  emitChats();
 })();
