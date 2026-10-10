@@ -30,3 +30,14 @@ def test_the_page_asks_for_the_exact_widget_version(client):
     css = re.search(r'href="/widget/widget\.css\?v=([0-9a-f]{10})"', r.text)
     assert js and css and js.group(1) == css.group(1)
     assert client.get(f"/widget/widget.js?v={js.group(1)}").status_code == 200
+
+
+def test_versioned_widget_files_are_cached_for_good(client):
+    r = client.get("/widget/widget.js?v=0123456789")
+    assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
+
+
+def test_an_unchanged_page_is_a_304(client):
+    first = client.get("/")
+    again = client.get("/", headers={"If-None-Match": first.headers["etag"]})
+    assert again.status_code == 304 and not again.content

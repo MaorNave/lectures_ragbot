@@ -23,6 +23,7 @@ import collections
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -34,7 +35,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from smartup_rag import __version__, trace
@@ -60,16 +61,22 @@ NO_CACHE = {"Cache-Control": "no-cache"}
 
 
 class RevalidatedStaticFiles(StaticFiles):
-    """The widget's files: browsers keep them but ask on every load whether they changed (ETag → 304).
+    """The widget's files. A versioned request (?v=…, as the chat page makes them) never changes, so it is cached for
+    good; any other is revalidated on every load (ETag → 304).
 
     Without a Cache-Control header a browser guesses a lifetime from Last-Modified and can keep an old widget.js for
     hours after an update — against a new index.html that calls functions the old script does not have.
     """
 
-    def file_response(self, *args: Any, **kwargs: Any):
-        response = super().file_response(*args, **kwargs)
-        response.headers["Cache-Control"] = "no-cache"
+    def file_response(self, full_path: Any, stat_result: Any, scope: Any, status_code: int = 200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        versioned = b"v=" in (scope.get("query_string") or b"")
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "no-cache"
         return response
+
+
+# the page's links to the widget, in any quoting, with or without a query string already
+_ASSET_LINK_RE = re.compile(r"""(["'])(/widget/widget\.(?:js|css))(?:\?[^"']*)?\1""")
 
 
 def _asset_version(web_dir: Path) -> str:
@@ -482,18 +489,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "dashboard": "/dashboard (pipeline traces; see DEBUG_DASHBOARD)",
     }
 
+    page_cache: dict[str, str] = {}  # the rewritten page, by its ETag
+
     @app.get("/", include_in_schema=False)
-    async def root():
-        """The full-page chat UI (web/index.html); falls back to the JSON index if the page is missing."""
+    async def root(request: Request):
+        """The full-page chat UI (web/index.html); falls back to the JSON index if the page is missing.
+
+        The page names the exact version of the widget it was written for (?v=…), so a cached old one is never used.
+        """
         page = WEB_DIR / "index.html"
-        if page.is_file():
-            # the page names the exact version of the widget it was written for, so a cached old one is never used
-            v = _asset_version(WEB_DIR)
-            html = (page.read_text(encoding="utf-8")
-                    .replace('"/widget/widget.js"', f'"/widget/widget.js?v={v}"')
-                    .replace('"/widget/widget.css"', f'"/widget/widget.css?v={v}"'))
-            return HTMLResponse(html, headers=NO_CACHE)
-        return api_index
+        if not page.is_file():
+            return api_index
+        v = _asset_version(WEB_DIR)
+        etag = '"' + hashlib.sha1(f"{page.stat().st_mtime_ns}:{v}".encode()).hexdigest()[:16] + '"'
+        headers = {**NO_CACHE, "ETag": etag}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        if etag not in page_cache:
+            page_cache.clear()
+            page_cache[etag] = _ASSET_LINK_RE.sub(lambda m: f"{m[1]}{m[2]}?v={v}{m[1]}", page.read_text(encoding="utf-8"))
+        return HTMLResponse(page_cache[etag], headers=headers)
 
     @app.get("/api", include_in_schema=False)
     async def api_root() -> dict[str, Any]:

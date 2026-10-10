@@ -220,9 +220,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span>New chat</span>
       </button>
     </header>
-    <div class="stale" id="stale" role="alert" hidden>
-      <b>This page loaded an older copy of the chat.</b> Reload it with ⌘ Shift R (Ctrl F5 on Windows) to use chats, New chat and suggestions.
-    </div>
+    <div class="stale" id="stale" role="alert" hidden></div>
     <section class="chat" id="chat" aria-label="Conversation"></section>
   </div>
 </div>
@@ -266,13 +264,20 @@
   };
   var sidebar = document.getElementById('sidebar'), scrim = document.getElementById('scrim'), menu = document.getElementById('menu');
 
+  function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   // the page needs this exact widget; an older cached copy lacks these, and the page must say so, not break
   var NEEDS = ['send', 'newChat', 'openChat', 'deleteChat', 'listChats', 'isBusy', 'isHebrew', 'setSuggestions', 'setPrompts', 'setDeckInfo'];
   var W = window.SmartUpWidget;
   var widgetOk = !!W && NEEDS.every(function (fn) { return typeof W[fn] === 'function'; });
-  if (!widgetOk) document.getElementById('stale').hidden = false;
+  if (!widgetOk) {
+    var banner = document.getElementById('stale');
+    banner.appendChild(node('b', null, W ? 'This page loaded an older copy of the chat.' : 'The chat didn’t load.'));
+    banner.appendChild(document.createTextNode(W
+      ? ' Reload it with ⌘ Shift R (Ctrl F5 on Windows) to use chats, New chat and suggestions.'
+      : ' Check that the server is running (python main.py), then reload the page.'));
+    banner.hidden = false;
+  }
   function widget() { return widgetOk ? W : null; }
-  function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function ask(text) { if (widget()) widget().send(text); closeDrawer(); }
   if (widget()) widget().setSuggestions(TOPICS);
 
@@ -430,10 +435,12 @@
           else ask('Summarize the lecture "' + l.lecture_title + '"');
         });
         // questions the composer can suggest while typing: this lecture's summary, and its topics
-        if (tier === 'v2' || tier === 'v1') prompts.push('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
+        if ((tier === 'v2' || tier === 'v1') && l.display) prompts.push('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
         else if (tier === 'tedx') prompts.push("Summarize Yonatan's TEDx talk");
-        else prompts.push('Summarize the lecture "' + l.lecture_title + '"');
-        subjects.slice(0, 3).forEach(function (s) { prompts.push('What does the course say about ' + s.charAt(0).toLowerCase() + s.slice(1) + '?'); });
+        else if (l.lecture_title) prompts.push('Summarize the lecture "' + l.lecture_title + '"');
+        subjects.filter(function (s) { return typeof s === 'string' && s.trim(); }).slice(0, 3).forEach(function (s) {
+          prompts.push('What does the course say about ' + s.trim() + '?');  // as written: "SaaS", "JTBD" keep their capitals
+        });
         grid.appendChild(b);
         tiles.push({ el: b, group: group, count: count, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
         total++;

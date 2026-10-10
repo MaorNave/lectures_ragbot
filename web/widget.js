@@ -698,13 +698,14 @@
   function showPrompts() {
     if (!promptsEl) return;
     var typed = inputEl.value.trim(), messages = active().messages, pick = [];
+    var last = messages[messages.length - 1];
     if (typed.length >= 2) {
       var qs = words(typed);
-      pick = promptPool().filter(function (q) {
+      if (qs.length) pick = promptPool().filter(function (q) {
         var w = words(q);
         return qs.every(function (x) { return w.some(function (y) { return y.indexOf(x) === 0; }); });
       }).slice(0, 4);
-    } else if (messages.length && !state.busy) {
+    } else if (last && last.role === 'bot' && last.status === 'answered' && !state.busy) {  // after an answer only
       var asked = {};
       messages.forEach(function (m) { if (m.role === 'user') asked[String(m.text).trim().toLowerCase()] = true; });
       var pool = config.suggestions.filter(function (q) { return !asked[q.trim().toLowerCase()]; });
@@ -719,11 +720,14 @@
   function promptChip(question, marks) {
     var b = el('button', { class: 'su-prompt', type: 'button', dir: dirOf(question), title: question });
     question.split(/(\s+)/).forEach(function (part) {
-      var lower = part.toLowerCase(), hit = null;
+      // a word may follow a quote or bracket: '"Lean' matches "lean"
+      var split = /^([^0-9A-Za-z\u0590-\u05ff]*)([\s\S]*)$/.exec(part), lead = split[1], rest = split[2];
+      var lower = rest.toLowerCase(), hit = null;
       marks.forEach(function (m) { if (!hit && lower.indexOf(m) === 0) hit = m; });
       if (hit) {
-        b.appendChild(el('mark', { text: part.slice(0, hit.length) }));
-        if (part.length > hit.length) b.appendChild(document.createTextNode(part.slice(hit.length)));
+        if (lead) b.appendChild(document.createTextNode(lead));
+        b.appendChild(el('mark', { text: rest.slice(0, hit.length) }));
+        if (rest.length > hit.length) b.appendChild(document.createTextNode(rest.slice(hit.length)));
       } else b.appendChild(document.createTextNode(part));
     });
     b.addEventListener('click', function () {
