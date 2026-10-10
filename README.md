@@ -92,14 +92,14 @@ cp .env.example .env                          # optional: every value in it is a
 On Linux without an NVIDIA GPU, install the CPU build of PyTorch first (`pip install torch --index-url
 https://download.pytorch.org/whl/cpu`); the default PyPI wheel bundles several GB of CUDA libraries.
 
-Open **<http://localhost:8000/>**. An empty conversation shows a welcome screen with suggested questions; type a
-question in Hebrew or English and watch the answer **stream in token by token** into an answer card — inline citations
-coloured by source, the **Sources** under the answer, which source answered when the fallback chain was used, two
-stopwatches, and a copy button. The sidebar is the lecture library: the four sources in search order, and every lecture
-grouped by source with its main topic — filter it by topic or title, click a lecture for its summary. The page follows
+Open **<http://localhost:8000/>**. An empty conversation shows a bilingual headline and suggested questions; type a
+question in Hebrew or English and watch the answer **stream in token by token**. Colour means "which source"
+throughout: a rule beside each answer, its inline citations and its **Sources** list use the colour of the source it
+came from (v2 blue, TEDx red, v1 slate, outside lectures teal), with two stopwatches and a copy button underneath. The
+sidebar is the lecture library: one numbered tab per source in search order, every lecture listed under its source by
+main topic — filter it by topic or title, click a lecture for its summary. The page follows
 the system's light or dark mode, Hebrew conversations switch to right-to-left, and on a phone the library becomes a
-drawer. The floating-bubble version of the same widget is demonstrated at
-<http://localhost:8000/widget/embed-demo.html>.
+drawer.
 
 ### The pipeline dashboard
 
@@ -344,10 +344,9 @@ changed are re-embedded — and restart the API. A missing folder is an error ra
 
 | Path | What it is |
 |---|---|
-| `web/index.html` | The full-page chat UI served at `/`: the lecture library in a sidebar (the source order, every lecture grouped by source with its main topic, a filter; click for a summary), a status pill and a "New chat" button, and the widget rendered inline. Light and dark mode; a drawer on narrow screens. |
-| `web/widget.js`, `web/widget.css` | The embeddable chat widget — vanilla JS, no dependencies, no build step. Streams `/chat/stream` (falling back to `/chat`), renders a safe subset of Markdown into answer cards, colours citations by source, shows the Sources and the source that answered, runs two stopwatches per answer, offers a copy button, shows a welcome screen with suggested questions, keeps the conversation in `sessionStorage`, switches to RTL for Hebrew, and handles 429 politely. Themed through CSS variables, with `light`, `dark` and `auto` themes. |
-| `web/fonts/` | Heebo and Frank Ruhl Libre (Hebrew + Latin variable fonts, SIL OFL 1.1), self-hosted so the UI makes no third-party requests. |
-| `web/embed-demo.html` | A stand-in website page showing the floating bubble. |
+| `web/index.html` | The full-page chat UI served at `/`: the lecture library in a sidebar (every lecture grouped by source, in search order, with its main topic; a filter; click for a summary), a status pill and a "New chat" button, and the widget rendered inline. Light and dark mode; a drawer on narrow screens. |
+| `web/widget.js`, `web/widget.css` | The embeddable chat widget — vanilla JS, no dependencies, no build step. Streams `/chat/stream` (falling back to `/chat`), renders a safe subset of Markdown, marks each answer and its citations with the colour of their source, shows the Sources and the source that answered, runs two stopwatches per answer, offers a copy button, shows a welcome screen with suggested questions, keeps the conversation in `sessionStorage`, switches to RTL for Hebrew, and handles 429 politely. Themed through CSS variables, with `light`, `dark` and `auto` themes. |
+| `web/fonts/` | Heebo and Rubik (Hebrew + Latin variable fonts, SIL OFL 1.1), self-hosted so the UI makes no third-party requests. |
 | `web/dashboard.html` | The pipeline dashboard served at `/dashboard`. All trace text is inserted as text, never as HTML. |
 | `tests/` | The test suite (§10). |
 | `docs/ARCHITECTURE.md` | Design notes: requirements, decisions and their reasons, the move from Elasticsearch to the local index, and how the reranker thresholds were calibrated. |

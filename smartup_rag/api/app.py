@@ -5,7 +5,7 @@ Endpoints
     GET  /lectures      lecture catalogue grouped by source tier (v2 → TEDx → v1 → outsource)
     POST /chat          one blocking chat turn → ChatResponse
     POST /chat/stream   same, as Server-Sent Events: `token`* → `final` (or `error`)
-    GET  /widget/       static demo page + embeddable widget (web/)
+    GET  /widget/       the embeddable widget and its assets (web/)
     GET  /dashboard     pipeline dashboard (web/dashboard.html); GET /debug/traces[/{id}] feed it (DEBUG_DASHBOARD)
 
 Run:  .venv/bin/python -m smartup_rag.api.app [--host H] [--port P] [--reload]
@@ -457,7 +457,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "chat": "POST /chat",
         "chat_stream": "POST /chat/stream (text/event-stream)",
         "chat_ui": "/",
-        "embed_demo": "/widget/embed-demo.html",
         "dashboard": "/dashboard (pipeline traces; see DEBUG_DASHBOARD)",
     }
 

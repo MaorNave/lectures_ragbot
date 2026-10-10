@@ -67,15 +67,14 @@
   // ---------------------------------------------------------------------------------------------
   var STR = {
     en: {
-      subtitle: 'Answers grounded in Yonatan Stern’s lectures',
-      heroTitle: 'Ask the SmartUp lectures',
-      heroText: 'Every answer comes from Yonatan Stern’s lectures — the v2 course first, then his TEDx talk, the v1 course and other lectures — and cites the lecture it is drawn from.',
-      heroLabel: 'Try asking',
+      subtitle: 'Answers from Yonatan Stern’s lectures',
+      heroTitle: 'Ask the lectures.',
+      heroText: 'Ask about anything Yonatan Stern teaches in the SmartUp course, in English or Hebrew. Each answer names the lecture it comes from, so you can go back to the source.',
       copy: 'Copy', copied: 'Copied',
       placeholder: 'Ask about the lectures…',
       send: 'Send', open: 'Open chat', close: 'Close chat', newChat: 'New conversation',
       thinking: 'Thinking…', searching: 'Searching the lectures…',
-      sources: 'Sources', source: 'Source',
+      sources: 'sources', source: '1 source',
       welcome: 'Hi! I answer questions about the SmartUp Academy lectures by Yonatan Stern — in English or Hebrew. What would you like to know?',
       busy: 'The assistant is helping someone else right now. Please try again in a moment.',
       error: 'Something went wrong while contacting the assistant. Please try again.',
@@ -83,7 +82,7 @@
       fallbackNote: 'v1 material used',
       fallbackNotes: { tedx: 'From Yonatan\u2019s TEDx talk', v1: 'v1 material used', outsource: 'From lectures outside the course' },
       footer: 'Answers come only from the lecture transcripts.',
-      footerInline: 'Answers come only from the lecture transcripts · Enter to send, Shift+Enter for a new line',
+      footerInline: 'Answers use only the lecture transcripts. Shift+Enter starts a new line.',
       you: 'You', bot: 'Assistant', chars: 'characters',
       firstWords: 'First words', fullAnswer: 'Full answer', secs: 's',
       firstWordsHint: 'Time from sending the question until the answer started to appear',
@@ -91,15 +90,14 @@
       trace: 'trace ↗', traceHint: 'Open this answer on the pipeline dashboard: query, passages, grading, generation'
     },
     he: {
-      subtitle: 'תשובות שמבוססות על ההרצאות של יונתן שטרן',
-      heroTitle: 'שאלו את הרצאות SmartUp',
-      heroText: 'כל תשובה מבוססת על ההרצאות של יונתן שטרן — קודם גרסה v2 של הקורס, אחר כך הרצאת ה-TEDx, גרסה v1 והרצאות נוספות — ומציינת את ההרצאה שממנה היא לקוחה.',
-      heroLabel: 'אפשר לשאול למשל',
+      subtitle: 'תשובות מתוך ההרצאות של יונתן שטרן',
+      heroTitle: 'שאלו את ההרצאות.',
+      heroText: 'אפשר לשאול על כל נושא שיונתן שטרן מלמד בקורס של SmartUp, בעברית או באנגלית. כל תשובה מציינת את ההרצאה שממנה היא לקוחה, כדי שתוכלו לחזור למקור.',
       copy: 'העתקה', copied: 'הועתק',
       placeholder: 'שאל/י על ההרצאות…',
       send: 'שליחה', open: 'פתיחת צ׳אט', close: 'סגירת צ׳אט', newChat: 'שיחה חדשה',
       thinking: 'חושב…', searching: 'מחפש בהרצאות…',
-      sources: 'מקורות', source: 'מקור',
+      sources: 'מקורות', source: 'מקור אחד',
       welcome: 'שלום! אני עונה על שאלות לגבי הרצאות SmartUp Academy של יונתן שטרן — בעברית או באנגלית. במה אפשר לעזור?',
       busy: 'העוזר עסוק כרגע בשיחה אחרת. נסו שוב בעוד רגע.',
       error: 'משהו השתבש בפנייה לעוזר. נסו שוב.',
@@ -107,7 +105,7 @@
       fallbackNote: 'נעשה שימוש בחומר v1',
       fallbackNotes: { tedx: 'מתוך הרצאת ה-TEDx של יונתן', v1: 'נעשה שימוש בחומר v1', outsource: 'מתוך הרצאות מחוץ לקורס' },
       footer: 'התשובות מבוססות על תמלילי ההרצאות בלבד.',
-      footerInline: 'התשובות מבוססות על תמלילי ההרצאות בלבד · Enter לשליחה, Shift+Enter לשורה חדשה',
+      footerInline: 'התשובות מבוססות על תמלילי ההרצאות בלבד. Shift+Enter פותח שורה חדשה.',
       you: 'את/ה', bot: 'העוזר', chars: 'תווים',
       firstWords: 'מילים ראשונות', fullAnswer: 'תשובה מלאה', secs: 'שנ׳',
       firstWordsHint: 'הזמן משליחת השאלה ועד שהתשובה התחילה להופיע',
@@ -220,8 +218,7 @@
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9" stroke-linecap="round"/></svg>',
-    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    ask: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" stroke-linejoin="round"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" stroke-linejoin="round"/></svg>'
+    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   };
 
   // ---------------------------------------------------------------------------------------------
@@ -417,9 +414,19 @@
   // followed by prose is part of the answer and stays
   var SOURCES_SECTION_RE = /\n+[ \t]*#{1,4}[ \t]*(?:Sources|מקורות)[ \t]*:?[ \t]*(?:\n[ \t]*(?:[-*+•][^\n]*)?)+$/;
 
+  /** The source an answer came from: the fallback tier that answered, else its first citation's tier, else v2. */
+  function answerTier(msg) {
+    if (msg.fallbackTier && TIERS[msg.fallbackTier]) return msg.fallbackTier;
+    var first = (msg.citations || [])[0];
+    if (first && TIERS[first.tier]) return first.tier;
+    if (first && first.course_version === 'v1') return 'v1';
+    return 'v2';
+  }
+
   function sourcesBlock(citations, lang) {
     if (!citations || !citations.length) return null;
-    var label = (STR[lang] || STR.en)[citations.length > 1 ? 'sources' : 'source'] + ' · ' + citations.length;
+    var strs = STR[lang] || STR.en;
+    var label = citations.length > 1 ? citations.length + ' ' + strs.sources : strs.source;
     var items = citations.map(function (c) {
       var head = c.display === undefined || c.display === null ? ('Lecture ' + c.lecture_number) : c.display;  // '' = single talk
       var title = c.lecture_title ? '“' + c.lecture_title + '”' : '';
@@ -467,6 +474,7 @@
     // the server appends a "## Sources" list to the answer text (for API and CLI readers); the card shows the same
     // citations as its own sources block, so the text version is left out here
     var hasSources = !!(msg.citations && msg.citations.length);
+    wrap.classList.add('su-from-' + answerTier(msg));
     bubble.innerHTML = renderMarkdown(hasSources ? msg.text.replace(SOURCES_SECTION_RE, '') : msg.text);
     var card = el('div', { class: 'su-card' }, [bubble]);
     var src = sourcesBlock(msg.citations, lang);
@@ -498,8 +506,9 @@
   }
 
   function suggestionButton(question) {
-    var b = el('button', { class: 'su-suggestion', type: 'button', dir: dirOf(question), html: ICONS.ask });
+    var b = el('button', { class: 'su-suggestion', type: 'button', dir: dirOf(question) });
     b.appendChild(el('span', { text: question }));
+    b.insertAdjacentHTML('beforeend', ICONS.send);
     b.addEventListener('click', function () { send(question); });
     return b;
   }
@@ -507,13 +516,15 @@
   /** Before the first question: a welcome screen with suggested questions (inline), or a welcome message (bubble). */
   function emptyState() {
     if (config.mode === 'inline') {
+      // the assistant is bilingual, so the headline is too: English from the left edge, Hebrew from the right
       var hero = el('div', { class: 'su-hero su-empty' }, [
-        el('div', { class: 'su-hero-mark', text: 'SU', 'aria-hidden': 'true' }),
-        el('h2', { class: 'su-hero-title', text: t('heroTitle') }),
+        el('h2', { class: 'su-hero-title' }, [
+          el('span', { class: 'su-hero-line', lang: 'en', dir: 'ltr', text: STR.en.heroTitle }),
+          el('span', { class: 'su-hero-line', lang: 'he', dir: 'rtl', text: STR.he.heroTitle })
+        ]),
         el('p', { class: 'su-hero-text', text: config.welcome || t('heroText') })
       ]);
       if (config.suggestions.length) {
-        hero.appendChild(el('div', { class: 'su-hero-label', text: t('heroLabel') }));
         hero.appendChild(el('div', { class: 'su-suggest-grid' }, config.suggestions.map(suggestionButton)));
       }
       return hero;

@@ -4,26 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>SmartUp Academy · Lecture Assistant</title>
+<title>SmartUp lecture assistant</title>
 <link rel="preload" href="/widget/fonts/heebo-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/widget/fonts/frank-ruhl-libre-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/widget/fonts/rubik-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/widget/widget.css" data-smartup-widget-css="1">
 <style>
+  /* the page shares the widget's palette: cool paper, navy ink, and one colour per source */
   :root {
-    --paper: #f6f4ee; --surface: #ffffff; --ink: #15171c; --muted: #6e6b63; --line: #e6e1d6;
-    --primary: #2b4acb; --primary-soft: rgba(43, 74, 203, .10);
-    --side: #12151c; --side-2: #1a1e28; --side-ink: #ecebe6; --side-muted: #928f86; --side-line: #262a35;
-    --tier-v2: #7b92ff; --tier-tedx: #ff6f81; --tier-v1: #a6adba; --tier-outsource: #42c9b6;
-    --ok: #1f9d63; --warn: #d08a00; --bad: #d23b44;
+    --paper: #f3f5f9; --sheet: #ffffff; --ink: #151a30; --muted: #5c6378; --line: #dce1eb; --line-strong: #c7cedc;
+    --primary: #2b4acb; --hover: #eef1f7;
+    --tier-v2: #2b4acb; --tier-tedx: #e62b1e; --tier-v1: #6f778b; --tier-outsource: #0f8b7f;
+    --ok: #16935a; --warn: #b7791f; --bad: #c4302b;
     --font: "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Hebrew", Arial, sans-serif;
-    --font-display: "Frank Ruhl Libre", ui-serif, Georgia, "Times New Roman", serif;
+    --font-display: "Rubik", "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #0f1115; --surface: #181b22; --ink: #ebe9e4; --muted: #9c998f; --line: #272b35;
-      --primary: #8fa3ff; --primary-soft: rgba(143, 163, 255, .14);
-      --side: #0a0c10; --side-2: #141820; --side-line: #1f232d;
+      --paper: #0e1220; --sheet: #141a2b; --ink: #e8ebf4; --muted: #9aa1b8; --line: #242b40; --line-strong: #353d58;
+      --primary: #8fa3ff; --hover: #1b2236;
+      --tier-v2: #8fa3ff; --tier-tedx: #ff6b5e; --tier-v1: #a2aabf; --tier-outsource: #3cc4b3;
+      --ok: #3fcf8e; --warn: #e7b04d; --bad: #ff7b74;
       color-scheme: dark;
     }
   }
@@ -34,120 +35,113 @@
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   [hidden] { display: none !important; }
 
-  .app { display: grid; grid-template-columns: 304px minmax(0, 1fr); height: 100vh; height: 100dvh; }
+  .app { display: grid; grid-template-columns: 312px minmax(0, 1fr); height: 100vh; height: 100dvh; }
 
-  /* ---- sidebar: the lecture library ---------------------------------------------------------------- */
+  /* ---- sidebar: the lecture library, one tab per source, in the order they are searched -------------- */
   .sidebar {
-    background: var(--side); color: var(--side-ink); display: flex; flex-direction: column; gap: 20px;
-    min-height: 0; padding: 18px 14px 12px; overflow: hidden;
+    background: var(--sheet); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
   }
-  .sidebar :focus-visible { outline-color: var(--tier-v2); }
-  .brand { display: flex; align-items: center; gap: 12px; padding: 2px 6px; }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 18px 18px 14px; }
   .mark {
-    width: 42px; height: 42px; border-radius: 14px; flex: none; display: grid; place-items: center;
-    background: linear-gradient(140deg, #3a52d4, #182a8c); color: #fff;
-    font-family: var(--font-display); font-weight: 700; font-size: 17px;
-    box-shadow: 0 12px 26px -14px rgba(58, 82, 212, .95), inset 0 1px 0 rgba(255, 255, 255, .2);
+    width: 38px; height: 38px; border-radius: 10px; flex: none; display: grid; place-items: center;
+    background: var(--tier-v2); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 15px;
   }
-  .brand-name { font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.1; }
-  .brand-sub { font-size: 12.5px; color: var(--side-muted); margin-top: 3px; }
-  .side-h { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--side-muted); margin: 0 6px 10px; }
+  @media (prefers-color-scheme: dark) { .mark { background: #3a52d4; } }
+  .brand-name { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.15; }
+  .brand-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .close-drawer { display: none; margin-left: auto; }
 
-  .order ol { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 11px; position: relative; }
-  .order ol::before { content: ""; position: absolute; left: 17px; top: 14px; bottom: 14px; width: 2px; background: var(--side-line); }
-  .order li { display: flex; gap: 11px; align-items: center; position: relative; }
-  .order .step {
-    width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center;
-    font-size: 12px; font-weight: 700; color: #0b0e14; background: var(--c); box-shadow: 0 0 0 4px var(--side);
+  .filter {
+    display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 8px 11px; border-radius: 10px;
+    background: var(--paper); border: 1px solid var(--line); color: var(--muted); transition: border-color .15s;
   }
-  .order b { display: block; font-size: 13.5px; font-weight: 600; }
-  .order small { display: block; font-size: 12px; color: var(--side-muted); }
+  .filter:focus-within { border-color: var(--primary); }
+  .filter input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; color: var(--ink); }
+  .filter input::placeholder { color: var(--muted); }
+  .filter input::-webkit-search-cancel-button { cursor: pointer; }
+  .filter svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+
+  .lectures { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
   .t-v2 { --c: var(--tier-v2); } .t-tedx { --c: var(--tier-tedx); } .t-v1 { --c: var(--tier-v1); } .t-outsource { --c: var(--tier-outsource); }
 
-  .library { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .lib-head { display: flex; align-items: baseline; justify-content: space-between; }
-  .lib-count { font-size: 12px; color: var(--side-muted); margin: 0 6px 10px; }
-  .filter {
-    display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; padding: 9px 11px; border-radius: 12px;
-    background: var(--side-2); border: 1px solid var(--side-line); color: var(--side-muted); transition: border-color .15s;
-  }
-  .filter:focus-within { border-color: var(--tier-v2); }
-  .filter input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--side-ink); }
-  .filter input::placeholder { color: var(--side-muted); }
-  .filter svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
-  .lectures { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px 6px; scrollbar-width: thin; scrollbar-color: var(--side-line) transparent; }
-  .group { margin-bottom: 4px; }
+  /* a source: its number in the search order, name, what it is for; open, its lectures hang off a rail in its colour */
+  .group { margin-bottom: 2px; }
   .group > summary {
-    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px;
-    padding: 8px 8px; border-radius: 10px; font-size: 13.5px; font-weight: 600; user-select: none;
+    list-style: none; cursor: pointer; user-select: none; border-radius: 10px;
+    display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline;
+    padding: 9px 10px 9px 8px;
   }
   .group > summary::-webkit-details-marker { display: none; }
-  .group > summary:hover { background: var(--side-2); }
-  .g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
-  .g-count { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--side-muted); background: var(--side-2); padding: 1px 8px; border-radius: 999px; }
-  .g-chev { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--side-muted); stroke-width: 2.4; transition: transform .15s; }
-  .group[open] .g-chev { transform: rotate(90deg); }
-  .lect {
-    display: grid; grid-template-columns: 74px minmax(0, 1fr); column-gap: 8px; width: 100%; text-align: left;
-    background: none; border: 0; color: inherit; padding: 7px 8px; border-radius: 10px; cursor: pointer; transition: background .12s;
+  .group > summary:hover { background: var(--hover); }
+  .g-num {
+    grid-row: span 2; align-self: start; margin-top: 1px;
+    width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+    font-family: var(--font-display); font-size: 12px; font-weight: 700; color: #fff; background: var(--c);
   }
-  .lect:hover { background: var(--side-2); }
-  .lect .num { grid-row: span 2; font-size: 12.5px; font-weight: 700; color: var(--c); white-space: nowrap; padding-top: 1px; }
-  .lect .main { font-size: 13px; line-height: 1.35; color: var(--side-ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .lect .second { font-size: 11.5px; line-height: 1.35; color: var(--side-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lib-state { font-size: 13px; color: var(--side-muted); padding: 10px 8px; }
-  .lib-hint { font-size: 11.5px; color: var(--side-muted); margin: 8px 6px 0; }
-  .side-links { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 12px 6px 2px; border-top: 1px solid var(--side-line); font-size: 12.5px; }
-  .side-links a { color: var(--side-muted); text-decoration: none; }
-  .side-links a:hover { color: var(--side-ink); }
-  .close-drawer { display: none; margin-left: auto; }
+  @media (prefers-color-scheme: dark) { .g-num { color: #0e1220; } }
+  .g-name { font-family: var(--font-display); font-size: 14.5px; font-weight: 600; letter-spacing: -.005em; }
+  .g-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .g-role { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 1px; }
+  .g-list { margin: 2px 0 8px 18px; padding-left: 12px; border-left: 2px solid var(--c); }
+
+  .lect {
+    display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 8px; align-items: baseline; width: 100%; text-align: left;
+    background: none; border: 0; color: inherit; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background .12s;
+  }
+  .lect:hover { background: var(--hover); }
+  .lect .num {
+    font-family: var(--font-display); font-size: 12.5px; font-weight: 600; color: var(--c);
+    font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap;
+  }
+  .lect .main { display: block; min-width: 0; font-size: 13.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib-state { font-size: 13.5px; color: var(--muted); padding: 10px; line-height: 1.5; }
+  .lib-state code { font-size: 12.5px; }
+
+  .side-foot { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 18px 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .side-foot a { color: var(--muted); text-decoration: none; }
+  .side-foot a:hover { color: var(--ink); text-decoration: underline; }
 
   /* ---- main column ---------------------------------------------------------------------------------- */
   .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .topbar { display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: var(--paper); }
-  .tt-main { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
-  .tt-sub { font-size: 12.5px; color: var(--muted); margin-left: 10px; }
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 12px 20px; }
+  .tt-main { font-family: var(--font-display); font-size: 16px; font-weight: 600; display: none; }
   .spacer { flex: 1; }
-  .status {
-    display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted);
-    padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); white-space: nowrap;
-    max-width: 46vw; overflow: hidden; text-overflow: ellipsis;
-  }
-  .status i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
-  .status.ok i { background: var(--ok); box-shadow: 0 0 0 3px rgba(31, 157, 99, .18); }
-  .status.degraded i { background: var(--warn); box-shadow: 0 0 0 3px rgba(208, 138, 0, .18); }
-  .status.down i { background: var(--bad); box-shadow: 0 0 0 3px rgba(210, 59, 68, .18); }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; }
+  .status i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line-strong); }
+  .status.ok i { background: var(--ok); }
+  .status.degraded i { background: var(--warn); }
+  .status.down i { background: var(--bad); }
   .btn {
-    display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; padding: 8px 14px;
-    border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
-    transition: border-color .15s, color .15s;
+    display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; padding: 7px 13px;
+    border-radius: 10px; border: 1px solid var(--line-strong); background: var(--sheet); color: var(--ink); cursor: pointer;
+    transition: border-color .15s, background .15s;
   }
-  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn:hover { border-color: var(--ink); }
   .btn svg, .icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; }
   .icon-btn {
-    display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 11px;
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+    display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px;
+    border: 1px solid var(--line-strong); background: var(--sheet); color: var(--ink); cursor: pointer;
   }
-  .sidebar .icon-btn { border-color: var(--side-line); background: var(--side-2); color: var(--side-ink); }
   .chat { flex: 1; min-height: 0; }
   .chat .su-widget { height: 100%; }
-  .scrim { position: fixed; inset: 0; background: rgba(8, 10, 14, .5); z-index: 15; }
+  .scrim { position: fixed; inset: 0; background: rgba(14, 18, 32, .45); z-index: 15; }
   @media (min-width: 921px) { .scrim { display: none; } }  /* a drawer left open on a narrow window must not cover the page */
 
   @media (max-width: 920px) {
     .app { grid-template-columns: minmax(0, 1fr); }
     .sidebar {
-      position: fixed; inset: 0 auto 0 0; width: min(330px, 88vw); z-index: 20;
+      position: fixed; inset: 0 auto 0 0; width: min(340px, 88vw); z-index: 20; border-right: 0;
       transform: translateX(-102%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s;
     }
-    .sidebar.open { transform: none; visibility: visible; transition: transform .22s ease; box-shadow: 0 0 60px rgba(0, 0, 0, .45); }
+    .sidebar.open { transform: none; visibility: visible; transition: transform .22s ease; box-shadow: 0 0 60px rgba(14, 18, 32, .3); }
     .icon-btn, .close-drawer { display: inline-flex; }
-    .tt-sub { display: none; }
-    .topbar { padding: 10px 12px; gap: 10px; }
+    .tt-main { display: block; }
+    .topbar { padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--sheet); }
     .btn { padding: 8px 10px; }
     .btn span { display: none; }
   }
-  @media (max-width: 520px) { .status span { display: none; } .status { padding: 8px; } }
+  @media (max-width: 520px) { .status span { display: none; } }
   @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
 </style>
 </head>
@@ -158,35 +152,22 @@
       <div class="mark" aria-hidden="true">SU</div>
       <div>
         <div class="brand-name">SmartUp Academy</div>
-        <div class="brand-sub">Lecture assistant · Yonatan Stern</div>
+        <div class="brand-sub">Yonatan Stern’s course, searchable</div>
       </div>
       <button class="icon-btn close-drawer" id="close-drawer" type="button" aria-label="Close the lecture list">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>
       </button>
     </div>
 
-    <section class="order" aria-labelledby="order-h">
-      <h2 class="side-h" id="order-h">Where answers come from</h2>
-      <ol>
-        <li class="t-v2"><span class="step">1</span><span><b>Foundations v2</b><small>the current course, always first</small></span></li>
-        <li class="t-tedx"><span class="step">2</span><span><b>TEDx talk</b><small>when v2 has no strong match</small></span></li>
-        <li class="t-v1"><span class="step">3</span><span><b>Foundations v1</b><small>the first version of the course</small></span></li>
-        <li class="t-outsource"><span class="step">4</span><span><b>Outside the course</b><small>talks and Digital Innovation IDC</small></span></li>
-      </ol>
-    </section>
+    <label class="filter">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
+      <input id="filter" type="search" placeholder="Find a lecture by topic or title" autocomplete="off" aria-label="Find a lecture">
+    </label>
+    <div class="lectures" id="lectures" aria-label="Sources, in the order they are searched">
+      <div class="lib-state">Loading the lectures…</div>
+    </div>
 
-    <section class="library" aria-labelledby="lib-h">
-      <div class="lib-head"><h2 class="side-h" id="lib-h">Lectures</h2><span class="lib-count" id="lib-count"></span></div>
-      <label class="filter">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>
-        <input id="filter" type="search" placeholder="Filter by topic or title" autocomplete="off" aria-label="Filter lectures">
-      </label>
-      <div class="lectures" id="lectures"><div class="lib-state">Loading the catalogue…</div></div>
-      <p class="lib-hint">Click a lecture for its summary.</p>
-    </section>
-
-    <nav class="side-links" aria-label="More">
-      <a href="/widget/embed-demo.html">Website widget</a>
+    <nav class="side-foot" aria-label="More">
       <a href="/docs">API docs</a>
       <a id="dashlink" href="/dashboard" hidden>Pipeline dashboard</a>
     </nav>
@@ -198,10 +179,10 @@
       <button class="icon-btn" id="menu" type="button" aria-label="Show the lecture list" aria-controls="sidebar" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round"/></svg>
       </button>
-      <div><span class="tt-main">Ask the lectures</span><span class="tt-sub">Hebrew or English · every answer cites its lecture</span></div>
+      <span class="tt-main">Ask the lectures</span>
       <div class="spacer"></div>
       <span class="status" id="health" role="status"><i></i><span>Checking…</span></span>
-      <button class="btn" id="newchat" type="button" title="Start a new conversation">
+      <button class="btn" id="newchat" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span>New chat</span>
       </button>
     </header>
@@ -223,7 +204,13 @@
     'מה ההבדל בין הרצאה 1 בגרסה v1 ובגרסה v2?',
     'Summarize lecture 10'
   ];
-  var TIER_NAMES = { v2: 'Foundations v2', tedx: 'TEDx talk', v1: 'Foundations v1', outsource: 'Outside the course' };
+  // the four sources, in the order the assistant searches them
+  var TIERS = {
+    v2: { name: 'Foundations v2', role: 'The current course. Searched first.' },
+    tedx: { name: 'TEDx talk', role: 'Used when v2 has no strong match.' },
+    v1: { name: 'Foundations v1', role: 'The course’s first version.' },
+    outsource: { name: 'Outside the course', role: 'Other talks and the Digital Innovation lectures.' }
+  };
   var sidebar = document.getElementById('sidebar'), scrim = document.getElementById('scrim'), menu = document.getElementById('menu');
 
   function widget() { return window.SmartUpWidget; }
@@ -251,25 +238,19 @@
     var problems = [];
     if (!ol.ok) problems.push('Ollama is not running');
     else {
-      if (ol.model_present === false) problems.push(h.chat_model + ' not pulled');
-      if (ol.embed_model_present === false) problems.push(h.embed_model + ' not pulled');
+      if (ol.model_present === false) problems.push(h.chat_model + ' is not downloaded');
+      if (ol.embed_model_present === false) problems.push(h.embed_model + ' is not downloaded');
     }
-    if (!ix.ok) problems.push(ix.error || 'index unavailable');
+    if (!ix.ok) problems.push('the index is not built');
     var title = 'Chat model: ' + h.chat_model + '\nEmbeddings: ' + h.embed_model +
-      '\nIndex: ' + (ix.ok ? ix.lectures + ' lectures, ' + ix.passages + ' passages' : (ix.error || 'unavailable')) +
-      '\nReranker: ' + (rr.enabled === false ? 'off' : (rr.model || '') + (rr.loaded ? ' (loaded)' : ' (loads on first question)'));
-    if (h.status === 'ok') setStatus('ok', 'Ready · ' + h.chat_model, title);
-    else setStatus('degraded', problems.join(' · ') || 'Degraded', title);
-  }).catch(function () { setStatus('down', 'API unreachable'); });
+      '\nIndex: ' + (ix.ok ? ix.lectures + ' lectures, ' + ix.passages + ' passages' : 'not available') +
+      '\nReranker: ' + (rr.enabled === false ? 'off' : (rr.model || '') + (rr.loaded ? ' (loaded)' : ' (loads with the first question)'));
+    if (h.status === 'ok') setStatus('ok', 'Ready', title);
+    else setStatus('degraded', problems.length ? problems[0].charAt(0).toUpperCase() + problems[0].slice(1) : 'Partly working', title);
+  }).catch(function () { setStatus('down', 'Can’t reach the server'); });
 
   // ---- lecture library ----
   var rows = [];
-  function chevron() {
-    var ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), path = document.createElementNS(ns, 'path');
-    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('class', 'g-chev'); svg.setAttribute('aria-hidden', 'true');
-    path.setAttribute('d', 'M9 6l6 6-6 6'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(path); return svg;
-  }
   function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
   fetch(apiBase + '/lectures').then(function (r) {
@@ -277,42 +258,47 @@
     return r.json();
   }).then(function (groups) {
     var box = document.getElementById('lectures'); box.textContent = '';
-    var total = 0;
     // the API returns the groups in search order: v2 → TEDx → v1 → outside the course
     groups.forEach(function (g, gi) {
       var tier = g.tier || g.course_version;
+      var info = TIERS[tier] || { name: g.label || tier, role: '' };
       var details = node('details', 'group t-' + tier);
       if (gi === 0) details.open = true;
       var summary = node('summary');
-      summary.appendChild(chevron());
-      summary.appendChild(node('span', 'g-dot'));
-      summary.appendChild(node('span', null, TIER_NAMES[tier] || g.label || tier));
+      summary.appendChild(node('span', 'g-num', String(gi + 1)));
+      summary.appendChild(node('span', 'g-name', info.name));
       var count = node('span', 'g-count', String(g.lectures.length));
+      count.title = g.lectures.length + (g.lectures.length === 1 ? ' lecture' : ' lectures');
       summary.appendChild(count);
+      if (info.role) summary.appendChild(node('span', 'g-role', info.role));
       details.appendChild(summary);
+      var list = node('div', 'g-list');
       g.lectures.forEach(function (l) {
         var subjects = l.lecture_subjects || [];
         var generic = /^Foundations\b/i.test(l.lecture_title || '');  // "Foundations Course V2 L5 1" says less than the topics
         var b = node('button', 'lect'); b.type = 'button';
-        b.appendChild(node('span', 'num', l.display || (tier === 'tedx' ? 'TEDx' : 'Talk')));
+        var short = l.display ? l.display.replace(/^Lecture\s*/i, 'L').replace(/\s*Part\s*/i, '.') : (tier === 'tedx' ? 'TEDx' : '•');
+        b.appendChild(node('span', 'num', short));
         b.appendChild(node('span', 'main', generic && subjects.length ? subjects[0] : l.lecture_title));
-        b.appendChild(node('span', 'second', generic ? l.lecture_title : (subjects[0] || '')));
-        b.title = l.lecture_title + (subjects.length ? '\n\n' + subjects.join('\n') : '');
+        b.title = (l.display ? l.display + ': ' : '') + l.lecture_title + (subjects.length ? '\n\n' + subjects.join('\n') : '') +
+          '\n\nClick for a summary';
         b.addEventListener('click', function () {
           if (tier === 'v2' || tier === 'v1') ask('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
           else if (tier === 'tedx') ask("Summarize Yonatan's TEDx talk");
           else ask('Summarize the lecture "' + l.lecture_title + '"');
         });
-        details.appendChild(b);
+        list.appendChild(b);
         rows.push({ el: b, group: details, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
-        total++;
       });
+      details.appendChild(list);
       box.appendChild(details);
     });
-    document.getElementById('lib-count').textContent = total + ' lectures';
   }).catch(function () {
     var box = document.getElementById('lectures'); box.textContent = '';
-    box.appendChild(node('div', 'lib-state', 'The catalogue is unavailable — is the index built? (smartup ingest)'));
+    var msg = node('div', 'lib-state', 'The lecture list isn’t available. Build the index with ');
+    msg.appendChild(node('code', null, 'smartup ingest'));
+    msg.appendChild(document.createTextNode(', then reload.'));
+    box.appendChild(msg);
   });
 
   document.getElementById('filter').addEventListener('input', function (e) {
