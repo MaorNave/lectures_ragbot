@@ -22,7 +22,9 @@
  *
  * Public API: window.SmartUpWidget.{open, close, toggle, send(text), newChat(), reset() (= newChat),
  *             openChat(id), deleteChat(id), listChats(), isBusy(), setSuggestions([...] | [{label, items}]),
- *             setDeckInfo(text), setTheme({'--su-brand': '#...'})}
+ *             setPrompts([...]), setDeckInfo(text), setTheme({'--su-brand': '#...'})}
+ *   Full page: a strip above the composer suggests questions — ones not asked yet, or, while typing, the ones that
+ *   match (from the suggestions and the extra prompts given to setPrompts).
  *   send(text) while an answer is still coming asks it right after (the latest such question wins).
  *   newChat/openChat while an answer is coming stop it; what had arrived is kept in its conversation.
  * Events on document: 'smartup:busy' {busy}, 'smartup:chats' [{id, title, updatedAt, count, active}].
@@ -65,6 +67,7 @@
     theme: ds.theme === 'dark' || ds.theme === 'auto' ? ds.theme : 'light',
     suggestions: parseList(ds.suggestions),            // questions offered in the empty conversation
     suggestionGroups: [],                              // the same questions by topic (setSuggestions with groups)
+    prompts: [],                                       // more questions the composer can suggest while typing
     deckInfo: '',                                      // the title slide's footnote (setDeckInfo)
     history: ds.history === 'on',                      // keep every conversation (localStorage), not one per tab
     maxChars: 2000
@@ -79,7 +82,7 @@
       heroTitle: 'Ask the lectures.',
       heroText: 'Ask about anything Yonatan Stern teaches in the SmartUp course, in English or Hebrew. Each answer names the lecture it comes from, so you can go back to the source.',
       waiting: 'Waiting for the previous answer to finish…',
-      askNext: 'Ask next', stopped: 'Stopped: a new chat was started before this answer finished.',
+      promptsLabel: 'Suggested questions', stopped: 'Stopped: a new chat was started before this answer finished.',
       copy: 'Copy', copied: 'Copied',
       placeholder: 'Ask about the lectures…',
       send: 'Send', open: 'Open chat', close: 'Close chat', newChat: 'New conversation',
@@ -104,7 +107,7 @@
       heroTitle: 'שאלו את ההרצאות.',
       heroText: 'אפשר לשאול על כל נושא שיונתן שטרן מלמד בקורס של SmartUp, בעברית או באנגלית. כל תשובה מציינת את ההרצאה שממנה היא לקוחה, כדי שתוכלו לחזור למקור.',
       waiting: 'ממתין שהתשובה הקודמת תסתיים…',
-      askNext: 'אפשר לשאול גם', stopped: 'נעצר: שיחה חדשה נפתחה לפני שהתשובה הושלמה.',
+      promptsLabel: 'שאלות מוצעות', stopped: 'נעצר: שיחה חדשה נפתחה לפני שהתשובה הושלמה.',
       copy: 'העתקה', copied: 'הועתק',
       placeholder: 'שאל/י על ההרצאות…',
       send: 'שליחה', open: 'פתיחת צ׳אט', close: 'סגירת צ׳אט', newChat: 'שיחה חדשה',
@@ -409,6 +412,7 @@
   // DOM
   // ---------------------------------------------------------------------------------------------
   var root, panel, messagesEl, inputEl, sendBtn, launcherWrap, badgeEl, titleEl, subtitleEl, footerEl, newBtn, closeBtn, launcher;
+  var promptsEl = null;  // full page: suggested questions above the composer
 
   // one dark palette in the CSS (.su-theme-dark); "auto" switches it with the visitor's OS setting
   var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -448,7 +452,8 @@
     messagesEl = el('div', { class: 'su-messages', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
     inputEl = el('textarea', { class: 'su-input', rows: '1', placeholder: t('placeholder'), maxlength: String(config.maxChars), 'aria-label': t('placeholder') });
     sendBtn = el('button', { class: 'su-send', type: 'button', title: t('send'), 'aria-label': t('send'), html: ICONS.send, onclick: function () { send(); } });
-    var composer = el('div', { class: 'su-composer' }, [el('div', { class: 'su-composer-box' }, [inputEl, sendBtn])]);
+    if (inline) promptsEl = el('div', { class: 'su-prompts', role: 'group', 'aria-label': t('promptsLabel'), hidden: '' });
+    var composer = el('div', { class: 'su-composer' }, [promptsEl, el('div', { class: 'su-composer-box' }, [inputEl, sendBtn])]);
     footerEl = el('div', { class: 'su-footer', text: t(inline ? 'footerInline' : 'footer') });
     panel = el('div', { class: 'su-panel', role: 'dialog', 'aria-modal': 'false', 'aria-label': config.title }, [header, messagesEl, composer, footerEl]);
 
@@ -469,6 +474,7 @@
     });
     inputEl.addEventListener('input', function () {
       autosize();
+      showPrompts();
       inputEl.setAttribute('dir', inputEl.value ? dirOf(inputEl.value) : (state.uiLang === 'he' ? 'rtl' : 'ltr'));
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && state.open && !inline) close(); });
@@ -649,7 +655,7 @@
     var messages = active().messages;
     if (!messages.length) messagesEl.appendChild(emptyState());
     else messages.forEach(function (m) { messagesEl.appendChild(messageNode(m).wrap); });
-    showFollowUps();
+    showPrompts();
     if (messages.length) {
       scrollToBottom(true);
       // web fonts arriving later make the conversation taller: keep a reopened conversation at its end
@@ -674,23 +680,60 @@
     return node;
   }
 
-  /** Full page only: three suggested questions not asked yet in this conversation, under its latest answer. */
-  function showFollowUps() {
-    var old = messagesEl.querySelector('.su-next');
-    if (old && old.parentNode) old.parentNode.removeChild(old);
-    var messages = active().messages, last = messages[messages.length - 1];
-    if (config.mode !== 'inline' || state.busy || !last || last.role !== 'bot' || last.status !== 'answered') return;
-    var asked = {};
-    messages.forEach(function (m) { if (m.role === 'user') asked[String(m.text).trim().toLowerCase()] = true; });
-    var pool = config.suggestions.filter(function (q) { return !asked[q.trim().toLowerCase()]; });
-    if (!pool.length) return;
-    var start = messages.length % pool.length, pick = [];
-    for (var i = 0; i < Math.min(3, pool.length); i++) pick.push(pool[(start + i) % pool.length]);
-    messagesEl.appendChild(el('div', { class: 'su-next' }, [
-      el('div', { class: 'su-next-label', text: t('askNext') }),
-      el('div', { class: 'su-next-qs' }, pick.map(suggestionButton))
-    ]));
+  /** Every question the composer can suggest: the suggestions first, then the extra prompts; no repeats. */
+  function promptPool() {
+    var seen = {}, out = [];
+    config.suggestions.concat(config.prompts).forEach(function (q) {
+      var k = q.trim().toLowerCase();
+      if (k && !seen[k]) { seen[k] = true; out.push(q); }
+    });
+    return out;
   }
+  function words(s) { return s.toLowerCase().split(/[^0-9a-z\u0590-\u05ff]+/).filter(Boolean); }
+
+  /**
+   * Full page: up to four suggested questions above the composer. While typing (two letters or more): the questions
+   * containing every word typed, the match marked. Otherwise, after an answer: questions not asked yet here.
+   */
+  function showPrompts() {
+    if (!promptsEl) return;
+    var typed = inputEl.value.trim(), messages = active().messages, pick = [];
+    if (typed.length >= 2) {
+      var qs = words(typed);
+      pick = promptPool().filter(function (q) {
+        var w = words(q);
+        return qs.every(function (x) { return w.some(function (y) { return y.indexOf(x) === 0; }); });
+      }).slice(0, 4);
+    } else if (messages.length && !state.busy) {
+      var asked = {};
+      messages.forEach(function (m) { if (m.role === 'user') asked[String(m.text).trim().toLowerCase()] = true; });
+      var pool = config.suggestions.filter(function (q) { return !asked[q.trim().toLowerCase()]; });
+      var start = pool.length ? messages.length % pool.length : 0;
+      for (var i = 0; i < Math.min(4, pool.length); i++) pick.push(pool[(start + i) % pool.length]);
+    }
+    promptsEl.textContent = '';
+    promptsEl.hidden = !pick.length;
+    pick.forEach(function (q) { promptsEl.appendChild(promptChip(q, typed.length >= 2 ? words(typed) : [])); });
+  }
+  /** A suggested question; the words matching what was typed are marked like a highlighter. */
+  function promptChip(question, marks) {
+    var b = el('button', { class: 'su-prompt', type: 'button', dir: dirOf(question), title: question });
+    question.split(/(\s+)/).forEach(function (part) {
+      var lower = part.toLowerCase(), hit = null;
+      marks.forEach(function (m) { if (!hit && lower.indexOf(m) === 0) hit = m; });
+      if (hit) {
+        b.appendChild(el('mark', { text: part.slice(0, hit.length) }));
+        if (part.length > hit.length) b.appendChild(document.createTextNode(part.slice(hit.length)));
+      } else b.appendChild(document.createTextNode(part));
+    });
+    b.addEventListener('click', function () {
+      inputEl.value = ''; autosize();
+      send(question);
+      showPrompts();
+    });
+    return b;
+  }
+
 
   function typingNode(label) {
     var wrap = el('div', { class: 'su-msg su-bot su-typing-wrap' }, [
@@ -710,7 +753,7 @@
     emit('smartup:busy', { busy: b });
     if (b) return;
     state.inflight = null;
-    showFollowUps();
+    showPrompts();
     if (state.queued) {  // a question picked (a lecture, a suggestion) while the last answer was still coming
       var next = state.queued;
       state.queued = null;
@@ -823,6 +866,7 @@
     }
     if (text.length > config.maxChars) text = text.slice(0, config.maxChars);
     inputEl.value = ''; autosize();
+    if (promptsEl) { promptsEl.hidden = true; promptsEl.textContent = ''; }
 
     if (config.lang === 'auto') {
       var wanted = isHebrew(text) ? 'he' : 'en';
@@ -1025,7 +1069,12 @@
       : list.map(String).filter(Boolean);
     if (!root) return;
     if (!active().messages.length && !state.busy) renderAll();  // only the start screen lists them all
-    else if (!state.busy) showFollowUps();
+    else if (!state.busy) showPrompts();
+  }
+  /** More questions the composer may suggest while typing (e.g. one per lecture). */
+  function setPrompts(list) {
+    config.prompts = (Array.isArray(list) ? list : []).filter(function (q) { return typeof q === 'string' && q.trim(); });
+    showPrompts();
   }
   function setDeckInfo(text) {
     config.deckInfo = String(text || '');
@@ -1044,7 +1093,7 @@
     _mounted: true, config: config,
     open: function () { open(); }, close: close, toggle: toggle, send: send, setTheme: setTheme,
     newChat: newChat, reset: newChat, openChat: openChat, deleteChat: deleteChat, listChats: listChats,
-    isBusy: function () { return state.busy; }, setSuggestions: setSuggestions, setDeckInfo: setDeckInfo,
+    isBusy: function () { return state.busy; }, setSuggestions: setSuggestions, setPrompts: setPrompts, setDeckInfo: setDeckInfo,
     renderMarkdown: renderMarkdown, isHebrew: isHebrew
   };
   mount();

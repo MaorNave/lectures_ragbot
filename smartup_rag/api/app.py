@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import collections
+import hashlib
 import json
 import logging
 import threading
@@ -27,12 +28,13 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from smartup_rag import __version__, trace
@@ -54,6 +56,26 @@ MAX_CONCURRENT_CHATS = 2
 KEEP_WARM_CHECK_S = 20.0  # how often the keep-warm loop looks for a cold cache or an overdue re-prime
 SSE_KEEPALIVE_S = 15.0  # idle gap after which an SSE comment is sent so proxies keep the socket open
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """The widget's files: browsers keep them but ask on every load whether they changed (ETag → 304).
+
+    Without a Cache-Control header a browser guesses a lifetime from Last-Modified and can keep an old widget.js for
+    hours after an update — against a new index.html that calls functions the old script does not have.
+    """
+
+    def file_response(self, *args: Any, **kwargs: Any):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+def _asset_version(web_dir: Path) -> str:
+    """Changes whenever widget.js or widget.css changes: index.html loads them as ?v=<this>."""
+    stamps = [str((web_dir / n).stat().st_mtime_ns) for n in ("widget.js", "widget.css") if (web_dir / n).is_file()]
+    return hashlib.sha1("|".join(stamps).encode()).hexdigest()[:10]
 
 
 # ----------------------------------------------------------------------------------------
@@ -445,7 +467,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # -- static widget + demo page --------------------------------------------------------------
     if WEB_DIR.is_dir():
-        app.mount("/widget", StaticFiles(directory=str(WEB_DIR), html=True), name="widget")
+        app.mount("/widget", RevalidatedStaticFiles(directory=str(WEB_DIR), html=True), name="widget")
     else:  # pragma: no cover
         log.warning("web/ directory not found at %s — /widget/ is disabled", WEB_DIR)
 
@@ -465,7 +487,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """The full-page chat UI (web/index.html); falls back to the JSON index if the page is missing."""
         page = WEB_DIR / "index.html"
         if page.is_file():
-            return FileResponse(page, media_type="text/html", headers={"Cache-Control": "no-cache"})
+            # the page names the exact version of the widget it was written for, so a cached old one is never used
+            v = _asset_version(WEB_DIR)
+            html = (page.read_text(encoding="utf-8")
+                    .replace('"/widget/widget.js"', f'"/widget/widget.js?v={v}"')
+                    .replace('"/widget/widget.css"', f'"/widget/widget.css?v={v}"'))
+            return HTMLResponse(html, headers=NO_CACHE)
         return api_index
 
     @app.get("/api", include_in_schema=False)
@@ -480,7 +507,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/dashboard", include_in_schema=False)
     async def dashboard(request: Request):
         _require_dashboard(request)
-        return FileResponse(WEB_DIR / "dashboard.html", media_type="text/html", headers={"Cache-Control": "no-cache"})
+        return FileResponse(WEB_DIR / "dashboard.html", media_type="text/html", headers=NO_CACHE)
 
     @app.get("/debug/traces", include_in_schema=False)
     async def list_traces(request: Request) -> dict[str, Any]:

@@ -143,6 +143,11 @@
     display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 9px;
     border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); cursor: pointer;
   }
+  .stale {
+    margin: 0 20px 8px; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.45;
+    background: var(--mark); color: #12163a;
+  }
+  .stale b { font-weight: 650; }
   .chat { flex: 1; min-height: 0; }
   .chat .su-widget { height: 100%; }
   .scrim { position: fixed; inset: 0; background: rgba(12, 15, 42, .45); z-index: 15; }
@@ -215,6 +220,9 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span>New chat</span>
       </button>
     </header>
+    <div class="stale" id="stale" role="alert" hidden>
+      <b>This page loaded an older copy of the chat.</b> Reload it with ⌘ Shift R (Ctrl F5 on Windows) to use chats, New chat and suggestions.
+    </div>
     <section class="chat" id="chat" aria-label="Conversation"></section>
   </div>
 </div>
@@ -258,7 +266,12 @@
   };
   var sidebar = document.getElementById('sidebar'), scrim = document.getElementById('scrim'), menu = document.getElementById('menu');
 
-  function widget() { return window.SmartUpWidget; }
+  // the page needs this exact widget; an older cached copy lacks these, and the page must say so, not break
+  var NEEDS = ['send', 'newChat', 'openChat', 'deleteChat', 'listChats', 'isBusy', 'isHebrew', 'setSuggestions', 'setPrompts', 'setDeckInfo'];
+  var W = window.SmartUpWidget;
+  var widgetOk = !!W && NEEDS.every(function (fn) { return typeof W[fn] === 'function'; });
+  if (!widgetOk) document.getElementById('stale').hidden = false;
+  function widget() { return widgetOk ? W : null; }
   function node(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function ask(text) { if (widget()) widget().send(text); closeDrawer(); }
   if (widget()) widget().setSuggestions(TOPICS);
@@ -387,7 +400,7 @@
     return r.json();
   }).then(function (groups) {
     var box = document.getElementById('lectures'); box.textContent = '';
-    var total = 0;
+    var total = 0, prompts = [];
     // the API returns the groups in search order: v2 → TEDx → v1 → outside the course
     groups.forEach(function (g, gi) {
       var tier = g.tier || g.course_version;
@@ -416,6 +429,11 @@
           else if (tier === 'tedx') ask("Summarize Yonatan's TEDx talk");
           else ask('Summarize the lecture "' + l.lecture_title + '"');
         });
+        // questions the composer can suggest while typing: this lecture's summary, and its topics
+        if (tier === 'v2' || tier === 'v1') prompts.push('Summarize ' + (tier === 'v1' ? 'v1 ' : '') + l.display);
+        else if (tier === 'tedx') prompts.push("Summarize Yonatan's TEDx talk");
+        else prompts.push('Summarize the lecture "' + l.lecture_title + '"');
+        subjects.slice(0, 3).forEach(function (s) { prompts.push('What does the course say about ' + s.charAt(0).toLowerCase() + s.slice(1) + '?'); });
         grid.appendChild(b);
         tiles.push({ el: b, group: group, count: count, text: [l.display, l.lecture_title].concat(subjects).join(' ').toLowerCase() });
         total++;
@@ -424,7 +442,10 @@
       box.appendChild(group);
     });
     document.getElementById('lecture-count').textContent = String(total);
-    if (widget()) widget().setDeckInfo(total + ' lectures in ' + groups.length + ' sources');
+    if (widget()) {
+      widget().setDeckInfo(total + ' lectures in ' + groups.length + ' sources');
+      widget().setPrompts(prompts);  // what the composer can suggest while typing
+    }
   }).catch(function () {
     var box = document.getElementById('lectures'); box.textContent = '';
     var msg = node('div', 'lib-state', 'The lecture list isn’t available. Build the index with ');
