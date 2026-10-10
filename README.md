@@ -89,6 +89,10 @@ cp .env.example .env                          # optional: every value in it is a
 .venv/bin/smartup serve                       # FastAPI on API_PORT, default 8000 (make serve)
 ```
 
+Or run all four steps (models → ingest → check → serve) with one command, which also opens the chat page:
+`.venv/bin/python main.py` — in PyCharm, right-click `main.py` → **Run 'main'**. `python main.py --help` lists the
+switches (`--skip-ingest`, `--recreate`, `--no-serve`, `--port`, …).
+
 On Linux without an NVIDIA GPU, install the CPU build of PyTorch first (`pip install torch --index-url
 https://download.pytorch.org/whl/cpu`); the default PyPI wheel bundles several GB of CUDA libraries.
 
