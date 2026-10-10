@@ -14,6 +14,7 @@ dist/
 # Editors and OS
 .idea/
 .vscode/
+.claude/
 .DS_Store
 
 # Data: the repository ships only the lecture documents the index is built from (data/raw/drive_09_2026).
