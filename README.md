@@ -112,30 +112,6 @@ citations survived verification, and the final answer — plus a timeline of whe
 chat carries a small **trace ↗** link to its own trace. Traces live in memory (the last 50 calls) and are shown only
 to requests from this machine by default (`DEBUG_DASHBOARD`, §8).
 
-### Embedding it on the SmartUp website
-
-One tag before `</body>` on any page of the site:
-
-```html
-<script src="https://YOUR-API-HOST/widget/widget.js" data-api-base="https://YOUR-API-HOST" defer></script>
-```
-
-Then restrict who may call the API from a browser, in the API's `.env`:
-
-```
-CORS_ORIGINS=https://www.smartupacademy.org,https://smartupacademy.org
-```
-
-`CORS_ORIGINS=*` (the default) is fine for local development only.
-
-Optional attributes on the same tag: `data-title`, `data-lang` (`auto` | `en` | `he`), `data-position`
-(`right` | `left`), `data-theme` (`light` | `dark` | `auto` — `auto` follows the visitor's OS), `data-primary="#2b4acb"`,
-`data-welcome="..."`, `data-suggestions='["…", "…"]'` (questions offered before the first message), `data-storage-key`
-(namespaces the saved conversation in `sessionStorage`), `data-timing="off"` (hides the two stopwatches under each
-answer), `data-css`, `data-no-css`, and `data-mode="inline" data-target="#chat"` to render a full chat box into an
-element instead of a bubble (that is exactly what `web/index.html` does). The widget also exposes
-`window.SmartUpWidget.{open, close, toggle, send, reset, setSuggestions, setTheme}`; every colour is a CSS variable
-on `.su-widget` (`--su-primary`, `--su-bg`, `--su-paper`, `--su-radius`, …).
 
 ### The CLI is for operations
 
@@ -210,23 +186,6 @@ cross-encoder; a different model needs its own threshold calibration (§10).
 
 ---
 
-## 4. Retrieval: why local hybrid search, and how it works
-
-The first version of this project searched an Elastic Cloud Serverless project (hosted Jina embeddings and reranker).
-It worked, but it tied the chatbot to a paid cloud account and an API key, and nobody could run the repository
-without them. This version keeps the same retrieval *design* — hybrid legs fused by RRF, metadata filters in every
-leg, a multilingual cross-encoder, a grading fast path on its scores — and runs all of it locally:
-
-| | Elasticsearch version | This version |
-|---|---|---|
-| Vectors | `semantic_text` (hosted Jina v5 embeddings) | **Chroma** persistent collection, cosine, `bge-m3` vectors from Ollama |
-| Keyword search | BM25 on a `text` field | **SQLite FTS5** BM25 (`unicode61` tokenizer) on the passage text |
-| Metadata leg | `multi_match` on topic^2, subjects^2, title | FTS5 BM25 with column weights 2 / 2 / 1; ties broken by the dense leg |
-| Fusion | `rrf` retriever | `queries.rrf_fuse`: Σ 1 / (60 + rank), 30 per leg, 30 fused |
-| Filters | term filters per leg | the same conditions as a Chroma `where` and a SQL clause per leg |
-| Reranker | hosted `.jina-reranker-v2-base-multilingual` | local `BAAI/bge-reranker-v2-m3` (+ the context line) |
-| Lecture catalogue and summaries | the lecture index | the `lectures` table in SQLite |
-| Retrieval quality (eval, 37 questions) | hit@8 37/37, MRR 1.000 | hit@8 37/37, MRR 1.000 |
 
 ### The index
 
@@ -603,24 +562,6 @@ a follow-up) gets the compact grader prompt instead, because the grading task mu
 - **Progress messages.** Each source the chain reaches sends an SSE `status` event ("Not found in the v2 course —
   checking Yonatan's TEDx talk…"), and the answer is labelled with the source that answered.
 
-### Security
-
-- There is no secret to manage: no API key, no cloud account. `.env` is still git-ignored.
-- **Set `CORS_ORIGINS` to your site** before exposing the API. The default `*` lets any page call it.
-- Put the API behind HTTPS (a reverse proxy) before embedding the widget on a public page.
-- The chat endpoints are guarded by `asyncio.Semaphore(2)`: a third concurrent chat gets HTTP 429 `{"detail": "busy"}`
-  immediately. A visitor who closes the tab mid-answer does not keep the model busy: the server stops pulling tokens and
-  frees the slot within seconds.
-- A per-IP sliding-window limit (`CHAT_RATE_LIMIT_PER_MINUTE`) answers HTTP 429 beyond it; it is in-process only, so a
-  public deployment should add a limiter and authentication at the reverse proxy.
-- Request bodies over `MAX_REQUEST_BYTES` are rejected before parsing (413), chunked bodies without `Content-Length`
-  too (411); messages are capped at 2 000 characters; `thread_id` must match `^[A-Za-z0-9_.:-]{4,128}$`.
-- **`thread_id` is a bearer secret for its conversation.**
-- **The pipeline dashboard shows everything** — every visitor's questions, the passages and the full prompts. By default
-  (`DEBUG_DASHBOARD=local`) it answers only requests from this machine. Behind a reverse proxy on the same host every
-  request looks local: set `DEBUG_DASHBOARD=off` there.
-- `/health` reports statuses, model names and document counts — never paths, the host's model inventory or error
-  internals. Set `API_DOCS_ENABLED=false` on a public host.
 
 ### Troubleshooting
 
@@ -705,30 +646,6 @@ The integration checks run against the real index, Ollama and the reranker:
 ```bash
 RUN_INTEGRATION=1 .venv/bin/python -m pytest -q tests/test_integration_local.py
 ```
-
----
-
-## 11. Roadmap and known limitations
-
-- **v2 lecture titles are generic strings** — `Foundations Course V2 L5 1`, `Foundations Course V2 L6`, … Citations
-  reproduce the retrieved title verbatim, so answers show these titles. Better titles in the Drive files (or in
-  `loaders.clean_title`) followed by `smartup ingest` fix it.
-- **The thresholds belong to the reranker.** They were calibrated for `bge-reranker-v2-m3` with the context line (§10);
-  a different `RERANK_MODEL` needs its own calibration.
-- **Hebrew keywords are not stemmed.** FTS5's `unicode61` tokenizer does not strip Hebrew prefixes (ה, ו, ב, ל, …), so
-  "תמחור" and "התמחור" are different keywords; the dense and the metadata legs and the cross-encoder cover most of it.
-- **Several v1 Hebrew transcripts are partial** (Lectures 6–10, 13 and 15: 14–29 k characters of Hebrew against 80–104 k
-  of English). Hebrew questions still reach those lectures through the cross-lingual search.
-- **The Digital Innovation files are mislabelled in the export.** The loader relabels them; fixing the files would make
-  that rule unnecessary.
-- **The grader sees the conversation.** On a follow-up it reads the replayed history too, and earlier answers can sway
-  it; exact repeats never reach it (`repeat`), and its task says that an earlier answer is not evidence.
-- **`MemorySaver` is in-process.** Conversations die with the server and two API workers would not share them; swap in
-  `langgraph-checkpoint-sqlite` (or Postgres) for anything beyond a single process.
-- **The local LLM is single-tenant.** Two concurrent visitors saturate the machine and a third gets a 429. A public launch
-  needs a bigger machine, several Ollama hosts behind a queue, or a hosted model.
-- **No authentication** on the API, and the rate limit is in-process only — put a proxy in front of it before a public
-  launch.
 
 ---
 
