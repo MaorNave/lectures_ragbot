@@ -301,27 +301,56 @@
       } catch (e) { return {}; }
     },
     save: function (state) {
-      try {
-        var b = backend();
-        if (b) {
-          var keep = config.history ? state.chats : state.chats.filter(function (c) { return c.id === state.activeId; });
-          b.setItem(config.storageKey, JSON.stringify({
-            uiLang: state.uiLang,
-            open: !!state.open,
-            activeId: state.activeId,
-            chats: keep.filter(function (c) { return c.messages.length; }).slice(0, MAX_CHATS).map(function (c) {
-              return { id: c.id, threadId: c.threadId || null, title: c.title || '', createdAt: c.createdAt,
-                       updatedAt: c.updatedAt, messages: c.messages.slice(-MAX_MESSAGES) };
-            })
-          }));
+      var b = backend();
+      if (b) {
+        if (config.history) mergeStored(state);  // another tab may have saved chats since this one loaded
+        var keep = config.history ? state.chats : state.chats.filter(function (c) { return c.id === state.activeId; });
+        var chats = keep.filter(function (c) { return c.messages.length; }).slice(0, MAX_CHATS).map(function (c) {
+          return { id: c.id, threadId: c.threadId || null, title: c.title || '', createdAt: c.createdAt,
+                   updatedAt: c.updatedAt, messages: c.messages.slice(-MAX_MESSAGES) };
+        });
+        // storage is full: give up the oldest chats (never the open one) until the rest fits
+        for (;;) {
+          try {
+            b.setItem(config.storageKey, JSON.stringify({ uiLang: state.uiLang, open: !!state.open, activeId: state.activeId, chats: chats }));
+            break;
+          } catch (e) {
+            var oldest = -1;
+            for (var i = chats.length - 1; i >= 0; i--) if (chats[i].id !== state.activeId) { oldest = i; break; }
+            if (oldest < 0) break;  // only the open chat is left and it does not fit: it works, it is just not kept
+            chats.splice(oldest, 1);
+          }
         }
-      } catch (e) { /* storage full or unavailable: the conversation still works, it is just not kept */ }
+      }
       emitChats();
     }
   };
 
+  // ids of chats deleted in this tab, so a merge does not bring them back from another tab's save
+  var deletedIds = {};
+  /** Add the chats another tab saved, and take another tab's newer copy of a chat this one is not answering in. */
+  function mergeStored(state) {
+    var stored = loadChats(store.load());
+    stored.forEach(function (s) {
+      if (deletedIds[s.id]) return;
+      var mine = null;
+      for (var i = 0; i < state.chats.length; i++) if (state.chats[i].id === s.id) { mine = state.chats[i]; break; }
+      if (!mine) state.chats.push(s);
+      else if (s.updatedAt > mine.updatedAt && !(state.inflight && state.inflight.chatId === s.id)) {
+        mine.messages = s.messages; mine.title = s.title; mine.threadId = s.threadId || mine.threadId; mine.updatedAt = s.updatedAt;
+      }
+    });
+    state.chats.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+  }
+
   function chatId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function blankChat() { var now = Date.now(); return { id: chatId(), threadId: null, title: '', messages: [], createdAt: now, updatedAt: now }; }
+  /** A server conversation id made here (the API accepts one), so even a stopped first answer has its thread. */
+  function newThreadId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* not a secure context */ }
+    var s = ''; for (var i = 0; i < 4; i++) s += Math.random().toString(36).slice(2, 10);
+    return 'w-' + Date.now().toString(36) + '-' + s;
+  }
   function titleOf(messages) {
     var first = (messages || []).filter(function (m) { return m && m.role === 'user' && m.text; })[0];
     return first ? String(first.text).replace(/\s+/g, ' ').trim().slice(0, 90) : '';
@@ -656,8 +685,7 @@
     var pool = config.suggestions.filter(function (q) { return !asked[q.trim().toLowerCase()]; });
     if (!pool.length) return;
     var start = messages.length % pool.length, pick = [];
-    for (var i = 0; i < Math.min(3, pool.length); i++) pick.push(pool[(start + i * 3) % pool.length]);
-    pick = pick.filter(function (q, i) { return pick.indexOf(q) === i; });
+    for (var i = 0; i < Math.min(3, pool.length); i++) pick.push(pool[(start + i) % pool.length]);
     messagesEl.appendChild(el('div', { class: 'su-next' }, [
       el('div', { class: 'su-next-label', text: t('askNext') }),
       el('div', { class: 'su-next-qs' }, pick.map(suggestionButton))
@@ -801,6 +829,7 @@
       if (wanted !== state.uiLang) { state.uiLang = wanted; applyLang(); store.save(state); }
     }
     var chat = active();  // the answer belongs to this conversation, even if another one is opened meanwhile
+    if (!chat.threadId) chat.threadId = newThreadId();
     pushMessage({ role: 'user', text: text }, chat);
     var controller = window.AbortController ? new AbortController() : null, aborted = false, waitTimer = null;
     state.inflight = { chatId: chat.id, stop: function () {
@@ -914,8 +943,8 @@
       return fallbackToPost(String(err && err.message || err));
     }
     function onDone(finalPayload) {
+      if (finalPayload) return finish(finalPayload, null);  // complete, even if a stop came in just after
       if (aborted) return stopped();
-      if (finalPayload) return finish(finalPayload, null);
       if (serverError) return fail('error');
       if (tokens > 0) {
         // stream broke after tokens arrived: keep what we have rather than re-running the model
@@ -972,6 +1001,7 @@
     renderAll();
   }
   function deleteChat(id) {
+    deletedIds[id] = true;
     if (state.inflight && state.inflight.chatId === id) stopAnswer();
     state.chats = state.chats.filter(function (c) { return c.id !== id; });
     if (id === state.activeId) {
@@ -986,14 +1016,16 @@
   }
   /** Questions to offer: a list, or topics [{label, items: [...]}] shown as groups on the full page. */
   function setSuggestions(list) {
-    list = Array.isArray(list) ? list : [];
-    var grouped = list.length && typeof list[0] === 'object';
-    config.suggestionGroups = grouped ? list.map(function (g) {
-      return { label: String(g.label || ''), items: (g.items || []).map(String).filter(Boolean) };
+    list = (Array.isArray(list) ? list : []).filter(function (x) { return x !== null && x !== undefined && x !== ''; });
+    var grouped = list.some(function (x) { return typeof x === 'object'; });
+    config.suggestionGroups = grouped ? list.filter(function (g) { return typeof g === 'object'; }).map(function (g) {
+      return { label: String(g.label || ''), items: (Array.isArray(g.items) ? g.items : []).map(String).filter(Boolean) };
     }).filter(function (g) { return g.items.length; }) : [];
     config.suggestions = grouped ? [].concat.apply([], config.suggestionGroups.map(function (g) { return g.items; }))
       : list.map(String).filter(Boolean);
-    if (root) renderAll();
+    if (!root) return;
+    if (!active().messages.length && !state.busy) renderAll();  // only the start screen lists them all
+    else if (!state.busy) showFollowUps();
   }
   function setDeckInfo(text) {
     config.deckInfo = String(text || '');
@@ -1017,4 +1049,13 @@
   };
   mount();
   emitChats();
+  if (config.history) {
+    window.addEventListener('storage', function (e) {
+      if (e.key !== config.storageKey || !root) return;
+      var before = JSON.stringify(active().messages.length) + active().updatedAt;
+      mergeStored(state);
+      if (!state.busy && JSON.stringify(active().messages.length) + active().updatedAt !== before) renderAll();
+      emitChats();
+    });
+  }
 })();

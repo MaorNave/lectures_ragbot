@@ -287,7 +287,7 @@
   try { savedTab = localStorage.getItem(TAB_KEY); } catch (e) { /* ignore */ }
 
   // ---- status: rechecked every minute (every 10 s while something is wrong); "Answering…" while a chat runs ----
-  var health = { kind: '', text: 'Checking the server…', title: '' }, busy = false, nextCheck = null;
+  var health = { kind: '', text: 'Checking the server…', title: '' }, busy = false, nextCheck = null, checking = false;
   function paintStatus() {
     var pill = document.getElementById('health');
     var kind = busy ? 'busy' : health.kind, text = busy ? 'Answering…' : health.text;
@@ -297,6 +297,8 @@
   }
   function checkHealth() {
     clearTimeout(nextCheck);
+    if (checking) return;  // the check in flight schedules the next one: never two loops
+    checking = true;
     var ctrl = window.AbortController ? new AbortController() : null;
     var timeout = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
     fetch(apiBase + '/health', { cache: 'no-store', signal: ctrl && ctrl.signal }).then(function (r) {
@@ -322,6 +324,7 @@
       health = { kind: 'down', text: 'Can’t reach the server', title: 'Start it with: python main.py' };
     }).then(function () {
       clearTimeout(timeout);
+      checking = false;
       paintStatus();
       nextCheck = setTimeout(checkHealth, health.kind === 'ok' ? 60000 : 10000);
     });
